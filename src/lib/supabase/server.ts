@@ -40,7 +40,7 @@ export async function createClient() {
             /*
              * Server Componentから呼び出された場合、
              * Cookieを書き換えられないことがあります。
-             * 後ほど認証用proxyを追加してセッションを更新します。
+             * 認証用proxy.tsがセッションを更新します。
              */
           }
         },
