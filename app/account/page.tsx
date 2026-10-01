@@ -11,6 +11,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   return <main className="min-h-screen bg-slate-950 px-6 py-12 text-white">
     <div className="mx-auto max-w-2xl">
       <Link className="text-sm font-bold tracking-[0.25em] text-sky-400" href="/">WRITEPILOT</Link>
+      <Link className="ml-6 text-sm text-sky-300 underline" href="/dashboard">学習ホームへ</Link>
       <h1 className="mt-10 text-3xl font-bold">マイページ</h1>
       <p className="mt-3 text-slate-300">アカウントの確認と設定ができます。</p>
       <section className="mt-8 rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8">
@@ -21,7 +22,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       </section>
       <section className="mt-8 rounded-3xl border border-red-400/25 bg-slate-900 p-6 sm:p-8">
         <h2 className="text-xl font-semibold">退会</h2>
-        <p className="mb-6 mt-3 text-sm leading-7 text-slate-300">退会するとアカウントが削除され、ログインできなくなります。この操作は取り消せません。本人確認のため、現在のパスワードを入力してください。</p>
+        <p className="mb-6 mt-3 text-sm leading-7 text-slate-300">退会するとアカウントが削除され、ログインできなくなります。この操作は取り消せません。管理者がアップロードした動画は、先に管理画面から削除してください。本人確認のため、現在のパスワードを入力してください。</p>
         <AuthForm mode="delete" />
       </section>
     </div>

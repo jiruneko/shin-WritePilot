@@ -12,7 +12,7 @@ const messages: Record<string, string> = {
   "confirmation-error": "確認リンクが無効か、有効期限が切れています。登録済みの場合はログインしてください。未確認の場合は新規登録を再度お試しください。",
 };
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
-  if (await currentUser()) redirect("/account");
+  if (await currentUser()) redirect("/dashboard");
   const { status } = await searchParams;
   return <AuthShell title="おかえりなさい" description="ログインして、自分のペースで学びを進めましょう。">
     {status && messages[status] && <p role="status" className="mb-6 rounded-xl bg-slate-800 p-4 text-sm leading-6 text-slate-200">{messages[status]}</p>}
