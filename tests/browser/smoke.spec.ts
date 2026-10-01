@@ -15,7 +15,7 @@ test("preserves landing copy and usable auth navigation", async ({ page }) => {
   await page.getByLabel("メールアドレス").fill("learner@example.test");
   await page.getByLabel("パスワード", { exact: true }).fill("test-password-123");
   await page.getByRole("button", { name: "ログイン", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("現在アカウント機能を利用できません");
+  await expect(page.locator("form").getByRole("alert")).toContainText("現在アカウント機能を利用できません");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(errors).toEqual([]);
 });
