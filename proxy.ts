@@ -10,9 +10,10 @@ export async function proxy(request: NextRequest) {
   const supabase = createServerClient(url, key, {
     cookies: {
       getAll: () => request.cookies.getAll(),
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet, headers) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
         response = NextResponse.next({ request });
+        Object.entries(headers).forEach(([name, value]) => response.headers.set(name, value));
         cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
       },
     },
@@ -22,4 +23,4 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-export const config = { matcher: ["/", "/login", "/signup", "/account/:path*", "/auth/:path*"] };
+export const config = { matcher: ["/", "/login", "/signup", "/account/:path*", "/auth/:path*", "/dashboard/:path*", "/videos/:path*", "/admin/:path*"] };

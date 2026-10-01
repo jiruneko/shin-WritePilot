@@ -23,7 +23,7 @@ export async function signup(_state: AuthState, form: FormData): Promise<AuthSta
   } catch { return connectionError; }
   if (signedIn) {
     revalidatePath("/", "layout");
-    redirect("/account");
+    redirect("/dashboard");
   }
   // Same response for an existing account to avoid revealing registration status.
   return { success: "確認メールを送信しました。メールのリンクから登録を完了してください。届かない場合は迷惑メールをご確認ください。すでに登録済みの場合はログインしてください。" };
@@ -39,7 +39,7 @@ export async function login(_state: AuthState, form: FormData): Promise<AuthStat
     if (error) return { error: "ログインできませんでした。メールアドレス・パスワードと、確認メールでの登録完了をご確認ください。" };
   } catch { return connectionError; }
   revalidatePath("/", "layout");
-  redirect("/account");
+  redirect("/dashboard");
 }
 
 export async function logout(): Promise<void> {
@@ -77,9 +77,13 @@ export async function deleteAccount(_state: AuthState, form: FormData): Promise<
     const admin = createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, secret, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
+    // Uploaded teaching materials must be explicitly deleted through the recoverable workflow first.
+    const { data: ownedVideos, error: ownershipError } = await supabase.from("videos").select("id").eq("created_by", user.id).limit(1);
+    if (ownershipError) return { error: "教材の確認に失敗しました。時間をおいて再試行してください。" };
+    if (ownedVideos?.length) return { error: "先に管理画面でアップロード済みの動画を削除してください。" };
     // ID always comes from server-verified identity, never from the form.
     const { error: deletionError } = await admin.auth.admin.deleteUser(user.id);
-    if (deletionError) return { error: "退会を完了できませんでした。アカウントは削除されていません。時間をおいてお試しください。" };
+    if (deletionError) return { error: "退会を完了できませんでした。アカウントは削除されていません。管理者の場合はStorageに未保存の動画が残っていないか確認し、再試行してください。" };
     // Deletion has committed. Cookie cleanup failure must not report deletion as failed.
     await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
   } catch { return connectionError; }

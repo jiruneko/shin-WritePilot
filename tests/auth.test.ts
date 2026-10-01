@@ -6,8 +6,9 @@ const mocks = vi.hoisted(() => ({
   deleteUser: vi.fn(),
   adminFactory: vi.fn(),
   revalidate: vi.fn(),
+  ownedVideos: vi.fn(),
 }));
-vi.mock("@/src/lib/supabase/server", () => ({ createClient: async () => ({ auth: mocks.auth }) }));
+vi.mock("@/src/lib/supabase/server", () => ({ createClient: async () => ({ auth: mocks.auth, from: () => ({ select: () => ({ eq: () => ({ limit: mocks.ownedVideos }) }) }) }) }));
 vi.mock("@supabase/supabase-js", () => ({ createClient: mocks.adminFactory }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); } }));
@@ -24,6 +25,7 @@ function form(values: Record<string, string | undefined> = {}) {
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.ownedVideos.mockResolvedValue({ data: [], error: null });
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "public-test-key");
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "server-test-key");
@@ -48,7 +50,7 @@ describe("registration and login", () => {
   });
   it("supports projects with email confirmation disabled", async () => {
     mocks.auth.signUp.mockResolvedValue({ data: { session: { access_token: "token" } }, error: null });
-    await expect(signup({}, form())).rejects.toThrow("REDIRECT:/account");
+    await expect(signup({}, form())).rejects.toThrow("REDIRECT:/dashboard");
   });
   it("does not leak provider errors", async () => {
     mocks.auth.signInWithPassword.mockResolvedValue({ error: { message: "private provider detail" } });
@@ -57,7 +59,7 @@ describe("registration and login", () => {
     expect(result.error).not.toContain("private");
   });
   it("accepts existing shorter passwords at login", async () => {
-    await expect(login({}, form({ password: "oldpass" }))).rejects.toThrow("REDIRECT:/account");
+    await expect(login({}, form({ password: "oldpass" }))).rejects.toThrow("REDIRECT:/dashboard");
   });
   it("handles unavailable configuration", async () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
@@ -117,6 +119,11 @@ describe("account deletion authorization", () => {
     expect(mocks.deleteUser).toHaveBeenCalledExactlyOnceWith("real-user");
     expect(mocks.auth.signOut).toHaveBeenCalled();
   });
+  it("blocks account deletion until uploaded materials are removed", async () => {
+    mocks.ownedVideos.mockResolvedValue({ data: [{ id: "video" }], error: null });
+    expect((await deleteAccount({}, form({ confirmation: "delete" }))).error).toContain("動画を削除");
+    expect(mocks.deleteUser).not.toHaveBeenCalled();
+  });
   it("preserves the current session when deletion fails", async () => {
     mocks.deleteUser.mockResolvedValue({ error: { message: "dependent data" } });
     expect((await deleteAccount({}, form({ confirmation: "delete" }))).error).toContain("削除されていません");
@@ -133,7 +140,7 @@ describe("email confirmation", () => {
     mocks.auth.verifyOtp.mockResolvedValue({ error: null });
     const result = await GET(new NextRequest("https://writepilot.test/auth/confirm?token_hash=abc&type=signup&next=https://evil.example"));
     expect(mocks.auth.verifyOtp).toHaveBeenCalledWith({ token_hash: "abc", type: "signup" });
-    expect(result.headers.get("location")).toBe("https://writepilot.test/account");
+    expect(result.headers.get("location")).toBe("https://writepilot.test/dashboard");
     expect(result.headers.get("cache-control")).toBe("no-store");
   });
   it.each(["", "?token_hash=abc&type=recovery", "?type=signup"])("rejects invalid confirmation %s", async (query) => {
