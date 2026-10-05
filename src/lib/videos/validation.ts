@@ -2,7 +2,7 @@ export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 export const VIDEO_BUCKET = "videos";
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type Video = {
-  id: string; title: string; description: string; storage_path: string;
+  id: string; title: string; description: string; storage_path: string | null; youtube_id: string | null; is_sample: boolean;
   thumbnail_url: string | null; is_published: boolean; is_deleting: boolean;
   published_at: string | null; created_by: string | null; created_at: string; updated_at: string;
 };

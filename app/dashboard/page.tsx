@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { requireProfile } from "@/src/lib/auth/profile";
 import { LmsShell } from "@/app/components/lms-shell";
+import { loadLearning } from "@/src/lib/videos/progress";
+import { LearningProgress } from "@/app/components/learning-progress";
 export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
-  const { user, profile } = await requireProfile();
+  const { user, profile, supabase } = await requireProfile();
+  const { progress } = await loadLearning(supabase, user.id);
   return <LmsShell title="学習ホーム" admin={profile.role === "ADMIN"}>
+    <LearningProgress {...progress} />
     <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8"><h2 className="text-xl font-semibold">おかえりなさい{profile.display_name ? `、${profile.display_name}さん` : ""}</h2>
       <p className="my-4 leading-7 text-slate-300">動画教材を選んで、自分のペースで学びましょう。</p><Link className="button-primary" href="/videos">動画教材を見る</Link></section>
     <section className="mt-8 rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8"><h2 className="text-xl font-semibold">アカウント情報</h2>
