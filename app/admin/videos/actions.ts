@@ -68,7 +68,9 @@ export async function deleteVideo(id: string, confirmed: boolean): Promise<Video
     if (error) return failure;
     if (!video) return { success: true };
     invalidate(id);
-    const { error: storageError } = await supabase.storage.from(VIDEO_BUCKET).remove([video.storage_path]);
+    const { error: storageError } = video.storage_path
+      ? await supabase.storage.from(VIDEO_BUCKET).remove([video.storage_path])
+      : { error: null };
     if (storageError) return { error: "動画を非公開にしましたがファイル削除に失敗しました。削除を再試行してください。" };
     const { error: dbError } = await supabase.from("videos").delete().eq("id", id).eq("is_deleting", true);
     if (dbError) return { error: "ファイルは削除済みです。動画情報の削除を完了するため再試行してください。" };

@@ -4,15 +4,16 @@ vi.mock("@/src/lib/supabase/server", () => ({ createClient: async () => ({ auth:
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } }));
 import { prepareUpload, saveVideo, deleteVideo } from "@/app/admin/videos/actions";
-import { renewPlayback } from "@/app/videos/actions";
+import { completeLesson, renewPlayback } from "@/app/videos/actions";
+import { summarizeProgress, loadLearning } from "@/src/lib/videos/progress";
 import { requireAdmin } from "@/src/lib/auth/profile";
 import { videoMetadata, validateFile, MAX_VIDEO_BYTES } from "@/src/lib/videos/validation";
 const id = "10000000-0000-4000-8000-000000000001";
 const userId = "00000000-0000-4000-8000-000000000001";
 function query(data: unknown = null, error: unknown = null) {
   const result = { data, error };
-  const q = { select: vi.fn(), eq: vi.fn(), single: vi.fn(), maybeSingle: vi.fn(), insert: vi.fn(), update: vi.fn(), delete: vi.fn(), then: Promise.resolve(result).then.bind(Promise.resolve(result)) };
-  for (const key of ["select", "eq", "insert", "update", "delete"] as const) q[key].mockReturnValue(q);
+  const q = { select: vi.fn(), eq: vi.fn(), single: vi.fn(), maybeSingle: vi.fn(), insert: vi.fn(), update: vi.fn(), upsert: vi.fn(), order: vi.fn(), delete: vi.fn(), then: Promise.resolve(result).then.bind(Promise.resolve(result)) };
+  for (const key of ["select", "eq", "insert", "update", "delete", "upsert", "order"] as const) q[key].mockReturnValue(q);
   q.single.mockResolvedValue(result); q.maybeSingle.mockResolvedValue(result);
   return q;
 }
@@ -110,5 +111,57 @@ describe("input boundaries", () => {
     expect(videoMetadata(form()).thumbnail_url).toBeNull();
     const f = form(); f.set("title", " "); expect(() => videoMetadata(f)).toThrow();
     f.set("title", "valid"); f.set("description", "x".repeat(10001)); expect(() => videoMetadata(f)).toThrow();
+  });
+});
+
+
+describe("learning progress actions and reads", () => {
+  it("uses verified identity and an idempotent insert", async () => {
+    const write = query();
+    mocks.from.mockReturnValueOnce(query({ id })).mockReturnValueOnce(write);
+    expect(await completeLesson(id)).toEqual({ success: true });
+    expect(write.upsert).toHaveBeenCalledWith({ user_id: userId, video_id: id }, { onConflict: "user_id,video_id", ignoreDuplicates: true });
+    expect(mocks.revalidate).toHaveBeenCalledWith("/dashboard");
+    expect(mocks.revalidate).toHaveBeenCalledWith("/videos");
+    expect(mocks.revalidate).toHaveBeenCalledWith(`/videos/${id}`);
+  });
+  it("never reports success for a DB error or a lost response", async () => {
+    mocks.from.mockReturnValueOnce(query({ id })).mockReturnValueOnce(query(null, { message: "offline" }));
+    expect(await completeLesson(id)).toEqual({ error: expect.any(String) });
+    expect(mocks.revalidate).not.toHaveBeenCalled();
+    mocks.from.mockImplementationOnce(() => { throw new Error("network"); });
+    expect(await completeLesson(id)).toEqual({ error: expect.any(String) });
+  });
+  it("rejects anonymous, invalid, missing and unpublished lessons", async () => {
+    expect((await completeLesson("bad-id")).error).toBeTruthy();
+    expect(mocks.from).not.toHaveBeenCalled();
+    mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });
+    expect((await completeLesson(id)).error).toBeTruthy();
+    expect(mocks.from).not.toHaveBeenCalled();
+    const unavailable = query();
+    mocks.from.mockReturnValueOnce(unavailable);
+    expect((await completeLesson(id)).error).toBeTruthy();
+    expect(unavailable.eq).toHaveBeenCalledWith("is_published", true);
+    expect(unavailable.eq).toHaveBeenCalledWith("is_deleting", false);
+    expect(mocks.from).toHaveBeenCalledTimes(1);
+  });
+  it("skips Storage deletion for sample lessons", async () => {
+    mocks.from.mockReturnValueOnce(query({ role: "ADMIN" })).mockReturnValueOnce(query({ storage_path: null })).mockReturnValueOnce(query());
+    expect((await deleteVideo(id, true)).success).toBe(true);
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+  it("calculates 33%, handles empty catalogue, and excludes duplicates and unavailable lessons", () => {
+    expect(summarizeProgress([], [{ video_id: "old" }])).toMatchObject({ total: 0, completed: 0, percent: 0 });
+    expect(summarizeProgress([{ id: "a" }, { id: "b" }, { id: "c" }], [{ video_id: "a" }, { video_id: "a" }, { video_id: "old" }])).toMatchObject({ total: 3, completed: 1, percent: 33 });
+  });
+  it("loads persisted progress with an identity filter and does not mask read failures as zero", async () => {
+    const read = query([{ id, video_completions: [{ video_id: id }] }]);
+    mocks.from.mockReturnValueOnce(read);
+    const { createClient } = await import("@/src/lib/supabase/server");
+    const client = await createClient();
+    expect((await loadLearning(client, userId)).progress).toMatchObject({ total: 1, completed: 1, percent: 100 });
+    expect(read.eq).toHaveBeenCalledWith("video_completions.user_id", userId);
+    mocks.from.mockReturnValueOnce(query(null, { message: "offline" }));
+    await expect(loadLearning(client, userId)).rejects.toThrow("取得できません");
   });
 });
