@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
       const supabase = await createClient();
       const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "signup" });
       if (!error) {
-        const response = NextResponse.redirect(new URL("/account", request.url));
+        const response = NextResponse.redirect(new URL("/dashboard", request.url));
         response.headers.set("Cache-Control", "no-store");
         response.headers.set("Referrer-Policy", "no-referrer");
         return response;
