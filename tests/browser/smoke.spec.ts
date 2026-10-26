@@ -1,11 +1,12 @@
 import { test, expect } from "@playwright/test";
 
-test("preserves landing copy and usable auth navigation", async ({ page }) => {
+test("shows learning portal and usable auth navigation", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("自分のペースで、");
-  await expect(page.getByText("WritePilotは、となりのきょうしつのためのオンライン学習プラットフォームです。")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("学びたい気持ちから、");
+  await expect(page.getByRole("heading", { name: "IT\'s てらこや" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "無料講座を見る" })).toHaveAttribute("href", "/terakoya");
   await page.getByRole("link", { name: "新規登録", exact: true }).click();
   await expect(page).toHaveURL(/\/signup$/);
   await expect(page.getByLabel("メールアドレス")).toBeVisible();
