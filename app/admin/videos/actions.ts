@@ -36,7 +36,14 @@ export async function saveVideo(id: string, form: FormData, isNew: boolean): Pro
     if (!UUID.test(id)) return { error: "動画IDが不正です。" };
     let metadata;
     try { metadata = videoMetadata(form); } catch (error) { return { error: (error as Error).message }; }
-    if (isNew) {
+    if (isNew && metadata.source === "YOUTUBE") {
+      const { source: _source, youtube_id, ...fields } = metadata;
+      void _source;
+      const { error } = await supabase.from("videos").insert({
+        ...fields, id, youtube_id, storage_path: null, is_sample: true, created_by: user.id,
+      });
+      if (error) return { error: "YouTube教材を登録できませんでした。入力内容とデータベース設定を確認してください。" };
+    } else if (isNew) {
       // Never accept a storage path or owner supplied by the browser.
       const path = `${user.id}/${id}.mp4`;
       const { data: object, error: objectError } = await supabase.storage.from(VIDEO_BUCKET).info(path);
@@ -49,10 +56,20 @@ export async function saveVideo(id: string, form: FormData, isNew: boolean): Pro
         invalidate(id);
         return { success: true, id };
       }
-      const { error } = await supabase.from("videos").insert({ ...metadata, id, storage_path: path, created_by: user.id });
+      const { source: _source, youtube_id: _youtube, ...fields } = metadata;
+      void _source; void _youtube;
+      const { error } = await supabase.from("videos").insert({ ...fields, id, storage_path: path, created_by: user.id });
       if (error) return { error: "動画情報を保存できませんでした。ファイルは保持しています。同じ画面で保存を再試行してください。" };
     } else {
-      const { data, error } = await supabase.from("videos").update(metadata).eq("id", id).eq("is_deleting", false).select("id").maybeSingle();
+      const { data: original, error: fetchError } = await supabase.from("videos").select("storage_path,youtube_id").eq("id", id).maybeSingle();
+      if (fetchError || !original) return failure;
+      // Sources are immutable; never rely on a browser-controlled hidden field.
+      if ((original.youtube_id && metadata.youtube_id !== original.youtube_id) || (original.storage_path && metadata.source !== "UPLOAD")) return { error: "動画ソースの変更はできません。別の教材として登録してください。" };
+      const { source: _source, youtube_id: _youtube, ...fields } = metadata;
+      void _source; void _youtube;
+      if (original.storage_path && fields.brand === "TERAKOYA" && fields.access_level === "FREE" && fields.is_published) return { error: "アップロードしたMP4を無料公開することはできません。" };
+      if (original.youtube_id && (fields.brand !== "TERAKOYA" || fields.access_level !== "FREE")) return { error: "YouTube教材はてらこや無料講座専用です。" };
+      const { data, error } = await supabase.from("videos").update(fields).eq("id", id).eq("is_deleting", false).select("id").maybeSingle();
       if (error || !data) return { error: "保存できませんでした。削除処理中、または動画が存在しない可能性があります。" };
     }
     invalidate(id);
