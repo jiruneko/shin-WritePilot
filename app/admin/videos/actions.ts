@@ -14,6 +14,7 @@ async function adminContext() {
 }
 function invalidate(id?: string) {
   revalidatePath("/videos");
+  revalidatePath("/terakoya");
   revalidatePath("/admin/videos");
   if (id) { revalidatePath(`/videos/${id}`); revalidatePath(`/admin/videos/${id}/edit`); }
 }
