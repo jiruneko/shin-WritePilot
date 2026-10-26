@@ -7,7 +7,7 @@ import { prepareUpload, saveVideo, deleteVideo } from "@/app/admin/videos/action
 import { completeLesson, renewPlayback } from "@/app/videos/actions";
 import { summarizeProgress, loadLearning } from "@/src/lib/videos/progress";
 import { requireAdmin } from "@/src/lib/auth/profile";
-import { videoMetadata, validateFile, MAX_VIDEO_BYTES } from "@/src/lib/videos/validation";
+import { videoMetadata, parseYouTubeId, validateFile, MAX_VIDEO_BYTES } from "@/src/lib/videos/validation";
 const id = "10000000-0000-4000-8000-000000000001";
 const userId = "00000000-0000-4000-8000-000000000001";
 function query(data: unknown = null, error: unknown = null) {
@@ -114,6 +114,40 @@ describe("input boundaries", () => {
   });
 });
 
+
+describe("YouTube lesson registration", () => {
+  function youtubeForm() {
+    const f = form();
+    f.set("source_type", "YOUTUBE");
+    f.set("brand", "TERAKOYA");
+    f.set("access_level", "FREE");
+    f.set("category", "GENERATIVE_AI");
+    f.set("youtube_url", "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    return f;
+  }
+  it("accepts normal, shortened, and shorts YouTube links", () => {
+    expect(parseYouTubeId("https://youtu.be/dQw4w9WgXcQ")).toBe("dQw4w9WgXcQ");
+    expect(parseYouTubeId("https://www.youtube.com/shorts/dQw4w9WgXcQ")).toBe("dQw4w9WgXcQ");
+    expect(parseYouTubeId("https://www.youtube.com/watch?v=dQw4w9WgXcQ")).toBe("dQw4w9WgXcQ");
+  });
+  it.each(["https://evil.test/watch?v=dQw4w9WgXcQ", "http://youtu.be/dQw4w9WgXcQ", "https://www.youtube.com/watch?v=bad"])("rejects invalid URL %s", url => {
+    expect(() => parseYouTubeId(url)).toThrow();
+  });
+  it("does not accept a YouTube lesson as paid content", () => {
+    const f = youtubeForm(); f.set("access_level", "PAID");
+    expect(() => videoMetadata(f)).toThrow("無料講座専用");
+  });
+  it("registers a YouTube lesson without uploading private storage", async () => {
+    const insert = query();
+    mocks.from.mockReturnValueOnce(query({ role: "ADMIN" })).mockReturnValueOnce(insert);
+    expect((await saveVideo(id, youtubeForm(), true)).success).toBe(true);
+    expect(mocks.info).not.toHaveBeenCalled();
+    expect(insert.insert).toHaveBeenCalledWith(expect.objectContaining({
+      youtube_id: "dQw4w9WgXcQ", storage_path: null, is_sample: true,
+      brand: "TERAKOYA", access_level: "FREE", category: "GENERATIVE_AI",
+    }));
+  });
+});
 
 describe("learning progress actions and reads", () => {
   it("uses verified identity and an idempotent insert", async () => {
