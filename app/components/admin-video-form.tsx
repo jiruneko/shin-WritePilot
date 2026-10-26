@@ -45,6 +45,13 @@ export function AdminVideoForm({ video }: { video?: Video }) {
       <div><label htmlFor="description" className="field-label">説明</label><textarea id="description" name="description" className="field" rows={6} maxLength={10000} defaultValue={video?.description} /></div>
       {!video && <div><label htmlFor="file" className="field-label">動画ファイル（MP4・50MiB以下）</label><input id="file" name="file" className="field" type="file" accept="video/mp4,.mp4" required={!uploaded} disabled={!!uploaded} /><p className="mt-2 text-sm text-slate-400">再生互換性のためH.264映像・AAC音声を推奨します。</p></div>}
       <div><label htmlFor="thumbnail" className="field-label">サムネイル画像URL（任意・HTTPS）</label><input id="thumbnail" name="thumbnail_url" type="url" className="field" maxLength={2048} defaultValue={video?.thumbnail_url ?? ""} /></div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div><label htmlFor="brand" className="field-label">ブランド</label><select id="brand" name="brand" className="field" defaultValue={video?.brand ?? "WRITEPILOT"}><option value="WRITEPILOT">WritePilot</option><option value="TERAKOYA">IT&apos;s てらこや</option></select></div>
+        <div><label htmlFor="access_level" className="field-label">公開区分</label><select id="access_level" name="access_level" className="field" defaultValue={video?.access_level ?? "PAID"}><option value="PAID">有料（認証必須）</option><option value="FREE">無料</option></select></div>
+        <div><label htmlFor="category" className="field-label">分野</label><select id="category" name="category" className="field" defaultValue={video?.category ?? "IT_BASIC"}><option value="IT_BASIC">IT基礎</option><option value="GENERATIVE_AI">生成AI</option></select></div>
+      </div>
+      <input type="hidden" name="source_type" value={video?.youtube_id ? "YOUTUBE" : "UPLOAD"} />
+      <p className="text-sm text-slate-400">公開無料のてらこや教材はYouTubeソースのみ対応します。現状の新規アップロードは非公開StorageのMP4専用です。</p>
       <label className="flex items-center gap-3"><input type="checkbox" name="is_published" className="h-5 w-5" defaultChecked={video?.is_published} />公開する</label>
       <button type="submit" className="button-primary">{pending ? "処理中…" : uploaded ? "動画情報の保存を再試行" : "保存する"}</button>
     </fieldset>
