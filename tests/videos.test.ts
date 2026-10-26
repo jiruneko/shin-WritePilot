@@ -69,11 +69,15 @@ describe("server authorization and mutation recovery", () => {
   });
   it("updates metadata without file replacement and rejects a deleting row", async () => {
     const update = query({ id });
-    mocks.from.mockReturnValueOnce(query({ role: "ADMIN" })).mockReturnValueOnce(update);
+    mocks.from.mockReturnValueOnce(query({ role: "ADMIN" }))
+      .mockReturnValueOnce(query({ storage_path: `${userId}/${id}.mp4`, youtube_id: null }))
+      .mockReturnValueOnce(update);
     expect((await saveVideo(id, form(), false)).success).toBe(true);
     expect(update.eq).toHaveBeenCalledWith("is_deleting", false);
     expect(mocks.info).not.toHaveBeenCalled();
-    mocks.from.mockReturnValueOnce(query({ role: "ADMIN" })).mockReturnValueOnce(query());
+    mocks.from.mockReturnValueOnce(query({ role: "ADMIN" }))
+      .mockReturnValueOnce(query({ storage_path: `${userId}/${id}.mp4`, youtube_id: null }))
+      .mockReturnValueOnce(query());
     expect((await saveVideo(id, form(), false)).error).toBeTruthy();
   });
   it("requires explicit delete confirmation", async () => {
