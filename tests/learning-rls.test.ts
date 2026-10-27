@@ -43,6 +43,7 @@ beforeAll(async () => {
     ('${published}','公開動画','${admin}/${published}.mp4',true,'${admin}'),
     ('${hidden}','非公開動画','${admin}/${hidden}.mp4',false,'${admin}')`, admin);
   await db.exec(readFileSync(new URL("../supabase/migrations/202610050001_learning_progress.sql", import.meta.url), "utf8"));
+  await db.exec(readFileSync(new URL("../supabase/migrations/202610270005_undo_video_completion.sql", import.meta.url), "utf8"));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 
@@ -77,10 +78,17 @@ describe("learning migration with real PostgreSQL RLS", () => {
     expect((await asUser("select * from public.video_completions", admin)).rows).toHaveLength(0);
     await expect(asUser(insertCompletion(other))).rejects.toThrow(/row-level security/);
     await expect(asUser(`update public.video_completions set user_id='${other}'`)).rejects.toThrow(/permission denied/);
-    await expect(asUser("delete from public.video_completions")).rejects.toThrow(/permission denied/);
+    expect((await asUser("delete from public.video_completions returning user_id")).rows).toEqual([{ user_id: learner }]);
+    // Restore the learner record for subsequent checks.
+    await asUser(insertCompletion());
     await asUser(insertCompletion(other), other);
     expect((await asUser("select user_id from public.video_completions", other)).rows).toEqual([{ user_id: other }]);
     expect((await asUser("select user_id from public.video_completions")).rows).toEqual([{ user_id: learner }]);
+  });
+  it("cannot cancel another learner's completion even when targeting their row", async () => {
+    const result = await asUser(`delete from public.video_completions where user_id='${other}' returning user_id`);
+    expect(result.rows).toHaveLength(0);
+    expect((await asUser("select user_id from public.video_completions", other)).rows).toEqual([{ user_id: other }]);
   });
   it("rejects hidden, nonexistent and deleting lessons, including for admins", async () => {
     await expect(asUser(insertCompletion(learner, hidden))).rejects.toThrow(/row-level security/);
