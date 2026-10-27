@@ -38,8 +38,11 @@ export async function saveVideo(id: string, form: FormData, isNew: boolean): Pro
     if (isNew) {
       // Never accept a storage path or owner supplied by the browser.
       const path = `${user.id}/${id}.mp4`;
-      const { data: object, error: objectError } = await supabase.storage.from(VIDEO_BUCKET).info(path);
-      if (objectError || !object) return { error: "アップロード済み動画を確認できません。再試行してください。" };
+      // Verify this exact object using the same signed-URL permission path as playback.
+      // Storage.info() may fail under fine-grained Storage SELECT policies even
+      // after an upload succeeds; do not mistake that for a missing object.
+      const { data: verified, error: verifyError } = await supabase.storage.from(VIDEO_BUCKET).createSignedUrl(path, 60);
+      if (verifyError || !verified?.signedUrl) return { error: "アップロード済み動画を確認できません。Storageの読み取り権限を確認してください。ファイルは削除していません。" };
       // Idempotent retry after a lost response: do not delete a potentially committed file.
       const { data: existing, error: lookupError } = await supabase.from("videos").select("id,storage_path").eq("id", id).maybeSingle();
       if (lookupError) return failure;
