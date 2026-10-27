@@ -37,3 +37,20 @@ export async function completeLesson(id: string): Promise<{ success?: boolean; e
     return { success: true };
   } catch { return { error: "通信に失敗しました。再試行してください。" }; }
 }
+
+export async function undoCompleteLesson(id: string): Promise<{ success?: boolean; error?: string }> {
+  try {
+    if (!UUID.test(id)) return { error: "教材IDが不正です。" };
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return { error: "もう一度ログインしてください。" };
+    // Server-verified identity plus database RLS: never accept user_id from the caller.
+    const { error } = await supabase.from("video_completions").delete()
+      .eq("user_id", user.id).eq("video_id", id);
+    if (error) return { error: "学習完了を取り消せませんでした。再試行してください。" };
+    revalidatePath("/dashboard");
+    revalidatePath("/videos");
+    revalidatePath(`/videos/${id}`);
+    return { success: true };
+  } catch { return { error: "通信に失敗しました。再試行してください。" }; }
+}
