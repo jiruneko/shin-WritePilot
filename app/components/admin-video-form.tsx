@@ -8,6 +8,7 @@ export function AdminVideoForm({ video }: { video?: Video }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [uploadedThumbnailUrl, setUploadedThumbnailUrl] = useState<string | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   useEffect(() => {
     if (!thumbnailFile) { return; }
@@ -46,9 +47,12 @@ export function AdminVideoForm({ video }: { video?: Video }) {
         const storage = createClient().storage.from("video-thumbnails");
         const { error: imageError } = await storage.upload(ready.path, thumbnailFile, { upsert: false, contentType: thumbnailFile.type });
         if (imageError) throw new Error("画像を保存できませんでした。Storageの設定と権限を確認してください。");
-        form.set("thumbnail_url", storage.getPublicUrl(ready.path).data.publicUrl);
+        const publicUrl = storage.getPublicUrl(ready.path).data.publicUrl;
+        form.set("thumbnail_url", publicUrl);
+        setUploadedThumbnailUrl(publicUrl);
         setThumbnailFile(null);
       }
+      if (!thumbnailFile && uploadedThumbnailUrl) form.set("thumbnail_url", uploadedThumbnailUrl);
       setMessage("動画情報を保存しています…");
       form.delete("file");
       const result = await saveVideo(id, form, !video);
@@ -74,6 +78,7 @@ export function AdminVideoForm({ video }: { video?: Video }) {
           }
           setError("");
           setThumbnailFile(file);
+          setUploadedThumbnailUrl(null);
         }} />
         {(thumbnailPreview || video?.thumbnail_url) && <div className="aspect-video max-w-sm overflow-hidden rounded-lg bg-slate-800">
           {/* eslint-disable-next-line @next/next/no-img-element */}
