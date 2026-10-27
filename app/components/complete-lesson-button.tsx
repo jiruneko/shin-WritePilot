@@ -1,27 +1,26 @@
 "use client";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { completeLesson } from "@/app/videos/actions";
+import { completeLesson, undoCompleteLesson } from "@/app/videos/actions";
 
 export function CompleteLessonButton({ id, completed }: { id: string; completed: boolean }) {
   const router = useRouter();
-  const [saved, setSaved] = useState(false);
+  const [current, setCurrent] = useState(completed);
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
-  const done = completed || saved;
   return <div className="mb-8">
-    <button type="button" className="button-primary disabled:opacity-60" disabled={pending || done} onClick={() => {
+    <button type="button" className="button-primary disabled:opacity-60" disabled={pending} onClick={() => {
       setError(undefined);
       startTransition(async () => {
         try {
-          const result = await completeLesson(id);
-          if (!result.success) { setError(result.error || "保存できませんでした。再試行してください。"); return; }
-          setSaved(true);
+          const result = current ? await undoCompleteLesson(id) : await completeLesson(id);
+          if (!result.success) { setError(result.error || "変更を保存できませんでした。再試行してください。"); return; }
+          setCurrent(!current);
           router.refresh();
         } catch { setError("通信に失敗しました。再試行してください。"); }
       });
-    }}>{done ? "学習完了済み" : pending ? "保存中…" : "学習を完了する"}</button>
-    {done && <p role="status" className="mt-3 text-emerald-300">この教材の学習完了を記録しました。</p>}
+    }}>{pending ? "保存中…" : current ? "完了を取り消す" : "学習を完了する"}</button>
+    <p role="status" className="mt-3 text-sm text-slate-300">{current ? "この教材は学習完了済みです。" : "この教材は未完了です。"}</p>
     {error && <p role="alert" className="mt-3 text-red-300">{error}</p>}
   </div>;
 }
