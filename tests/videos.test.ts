@@ -46,53 +46,7 @@ describe("server authorization and mutation recovery", () => {
   });
   it("authorizes thumbnail paths and validates image size and type", async () => {
     const ok = await prepareThumbnail({ name: "cover.png", type: "image/png", size: 1024 });
-    expect(ok.path).toMatch(new RegExp(`^${userId}/[0-9a-f-]{36}\\\\.pngimport { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ getUser: vi.fn(), from: vi.fn(), rpc: vi.fn(), info: vi.fn(), remove: vi.fn(), signed: vi.fn(), revalidate: vi.fn() }));
-vi.mock("@/src/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser }, from: mocks.from, rpc: mocks.rpc, storage: { from: () => ({ info: mocks.info, remove: mocks.remove, createSignedUrl: mocks.signed }) } }) }));
-vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
-vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } }));
-import { prepareUpload, prepareThumbnail, saveVideo, deleteVideo } from "@/app/admin/videos/actions";
-import { completeLesson, renewPlayback } from "@/app/videos/actions";
-import { summarizeProgress, loadLearning } from "@/src/lib/videos/progress";
-import { requireAdmin } from "@/src/lib/auth/profile";
-import { videoMetadata, validateFile, MAX_VIDEO_BYTES } from "@/src/lib/videos/validation";
-const id = "10000000-0000-4000-8000-000000000001";
-const userId = "00000000-0000-4000-8000-000000000001";
-function query(data: unknown = null, error: unknown = null) {
-  const result = { data, error };
-  const q = { select: vi.fn(), eq: vi.fn(), single: vi.fn(), maybeSingle: vi.fn(), insert: vi.fn(), update: vi.fn(), upsert: vi.fn(), order: vi.fn(), delete: vi.fn(), then: Promise.resolve(result).then.bind(Promise.resolve(result)) };
-  for (const key of ["select", "eq", "insert", "update", "delete", "upsert", "order"] as const) q[key].mockReturnValue(q);
-  q.single.mockResolvedValue(result); q.maybeSingle.mockResolvedValue(result);
-  return q;
-}
-function form() { const f = new FormData(); f.set("title", "教材"); f.set("description", "説明"); f.set("is_published", "on"); return f; }
-beforeEach(() => {
-  vi.resetAllMocks();
-  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co"); vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "test-key");
-  mocks.getUser.mockResolvedValue({ data: { user: { id: userId } }, error: null });
-  mocks.from.mockReturnValue(query({ role: "ADMIN" }));
-  mocks.info.mockResolvedValue({ data: { name: `${id}.mp4` }, error: null });
-  mocks.rpc.mockResolvedValue({ data: true, error: null });
-  mocks.remove.mockResolvedValue({ error: null });
-  mocks.signed.mockResolvedValue({ data: { signedUrl: "https://example.test/signed" }, error: null });
-});
-describe("server authorization and mutation recovery", () => {
-  it("rejects direct admin page access by a learner", async () => {
-    mocks.from.mockReturnValue(query({ role: "USER" }));
-    await expect(requireAdmin()).rejects.toThrow("NOT_FOUND");
-  });
-  it("redirects anonymous admin page access to login", async () => {
-    mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
-    await expect(requireAdmin()).rejects.toThrow("REDIRECT:/login");
-  });
-  it.each(["USER", undefined])("rejects direct upload/save/delete actions with role %s", async role => {
-    mocks.from.mockReturnValue(query(role ? { role } : null));
-    expect((await prepareUpload({ name: "a.mp4", type: "video/mp4", size: 12 })).error).toBeTruthy();
-    expect((await saveVideo(id, form(), true)).error).toBeTruthy();
-    expect((await deleteVideo(id, true)).error).toBeTruthy();
-    expect(mocks.rpc).not.toHaveBeenCalled(); expect(mocks.remove).not.toHaveBeenCalled();
-  });
-));
+    expect(ok.path).toMatch(/^00000000-0000-4000-8000-000000000001\/[0-9a-f-]{36}\.png$/);
     expect((await prepareThumbnail({ name: "cover.svg", type: "image/svg+xml", size: 1024 })).error).toBeTruthy();
     expect((await prepareThumbnail({ name: "cover.png", type: "image/png", size: 6 * 1024 * 1024 })).error).toBeTruthy();
     mocks.from.mockReturnValue(query({ role: "USER" }));
