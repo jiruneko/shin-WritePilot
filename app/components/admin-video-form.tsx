@@ -27,7 +27,7 @@ export function AdminVideoForm({ video }: { video?: Video }) {
         if (ready.error || !ready.id || !ready.path) throw new Error(ready.error || "準備できませんでした。");
         setMessage("動画をアップロードしています。この画面を閉じずにお待ちください…");
         const { error: uploadError } = await createClient().storage.from(VIDEO_BUCKET).upload(ready.path, file, { contentType: "video/mp4", upsert: false, cacheControl: "0" });
-        if (uploadError) throw new Error("アップロードできませんでした。管理者権限・ファイル形式・サイズ・通信状態を確認してください。");
+        if (uploadError) throw new Error("アップロードできませんでした。管理者権限・ファイル形式・サイズ・通信状態とSupabase Storageのファイルサイズ上限（500MiB以上に設定）を確認してください。");
         id = ready.id;
         setUploaded({ id, path: ready.path });
       }
@@ -43,7 +43,7 @@ export function AdminVideoForm({ video }: { video?: Video }) {
     <fieldset disabled={pending || video?.is_deleting} className="space-y-6 disabled:opacity-60">
       <div><label htmlFor="title" className="field-label">タイトル</label><input id="title" name="title" className="field" maxLength={200} defaultValue={video?.title} required /></div>
       <div><label htmlFor="description" className="field-label">説明</label><textarea id="description" name="description" className="field" rows={6} maxLength={10000} defaultValue={video?.description} /></div>
-      {!video && <div><label htmlFor="file" className="field-label">動画ファイル（MP4・50MiB以下）</label><input id="file" name="file" className="field" type="file" accept="video/mp4,.mp4" required={!uploaded} disabled={!!uploaded} /><p className="mt-2 text-sm text-slate-400">再生互換性のためH.264映像・AAC音声を推奨します。</p></div>}
+      {!video && <div><label htmlFor="file" className="field-label">動画ファイル（MP4・500MiB以下）</label><input id="file" name="file" className="field" type="file" accept="video/mp4,.mp4" required={!uploaded} disabled={!!uploaded} /><p className="mt-2 text-sm text-slate-400">再生互換性のためH.264映像・AAC音声を推奨します。</p></div>}
       <div><label htmlFor="thumbnail" className="field-label">サムネイル画像URL（任意・HTTPS）</label><input id="thumbnail" name="thumbnail_url" type="url" className="field" maxLength={2048} defaultValue={video?.thumbnail_url ?? ""} /></div>
       <label className="flex items-center gap-3"><input type="checkbox" name="is_published" className="h-5 w-5" defaultChecked={video?.is_published} />公開する</label>
       <button type="submit" className="button-primary">{pending ? "処理中…" : uploaded ? "動画情報の保存を再試行" : "保存する"}</button>
