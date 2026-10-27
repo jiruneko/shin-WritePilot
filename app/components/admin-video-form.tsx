@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/src/lib/supabase/client";
 import { prepareThumbnail, prepareUpload, saveVideo } from "@/app/admin/videos/actions";
@@ -10,12 +10,10 @@ export function AdminVideoForm({ video }: { video?: Video }) {
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [uploadedThumbnailUrl, setUploadedThumbnailUrl] = useState<string | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
-  useEffect(() => {
-    if (!thumbnailFile) { return; }
-    const url = URL.createObjectURL(thumbnailFile);
-    setThumbnailPreview(url);
-    return () => { URL.revokeObjectURL(url); setThumbnailPreview(null); };
-  }, [thumbnailFile]);
+  const thumbnailPreviewRef = useRef<string | null>(null);
+  useEffect(() => () => {
+    if (thumbnailPreviewRef.current) URL.revokeObjectURL(thumbnailPreviewRef.current);
+  }, []);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [uploaded, setUploaded] = useState<{ id: string; path: string } | null>(null);
@@ -77,6 +75,10 @@ export function AdminVideoForm({ video }: { video?: Video }) {
             return;
           }
           setError("");
+          if (thumbnailPreviewRef.current) URL.revokeObjectURL(thumbnailPreviewRef.current);
+          const url = file ? URL.createObjectURL(file) : null;
+          thumbnailPreviewRef.current = url;
+          setThumbnailPreview(url);
           setThumbnailFile(file);
           setUploadedThumbnailUrl(null);
         }} />
