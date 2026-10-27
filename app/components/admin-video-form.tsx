@@ -1,12 +1,20 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/src/lib/supabase/client";
-import { prepareUpload, saveVideo } from "@/app/admin/videos/actions";
+import { prepareThumbnail, prepareUpload, saveVideo } from "@/app/admin/videos/actions";
 import { videoMetadata, validateFile, VIDEO_BUCKET, type Video } from "@/src/lib/videos/validation";
 export function AdminVideoForm({ video }: { video?: Video }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
+  useEffect(() => {
+    if (!thumbnailFile) { return; }
+    const url = URL.createObjectURL(thumbnailFile);
+    setThumbnailPreview(url);
+    return () => { URL.revokeObjectURL(url); setThumbnailPreview(null); };
+  }, [thumbnailFile]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [uploaded, setUploaded] = useState<{ id: string; path: string } | null>(null);
@@ -31,6 +39,16 @@ export function AdminVideoForm({ video }: { video?: Video }) {
         id = ready.id;
         setUploaded({ id, path: ready.path });
       }
+      if (thumbnailFile) {
+        setMessage("サムネイル画像をアップロードしています…");
+        const ready = await prepareThumbnail({ name: thumbnailFile.name, size: thumbnailFile.size, type: thumbnailFile.type });
+        if (ready.error || !ready.path) throw new Error(ready.error || "画像アップロードを準備できませんでした。");
+        const storage = createClient().storage.from("video-thumbnails");
+        const { error: imageError } = await storage.upload(ready.path, thumbnailFile, { upsert: false, contentType: thumbnailFile.type });
+        if (imageError) throw new Error("画像を保存できませんでした。Storageの設定と権限を確認してください。");
+        form.set("thumbnail_url", storage.getPublicUrl(ready.path).data.publicUrl);
+        setThumbnailFile(null);
+      }
       setMessage("動画情報を保存しています…");
       form.delete("file");
       const result = await saveVideo(id, form, !video);
@@ -44,7 +62,24 @@ export function AdminVideoForm({ video }: { video?: Video }) {
       <div><label htmlFor="title" className="field-label">タイトル</label><input id="title" name="title" className="field" maxLength={200} defaultValue={video?.title} required /></div>
       <div><label htmlFor="description" className="field-label">説明</label><textarea id="description" name="description" className="field" rows={6} maxLength={10000} defaultValue={video?.description} /></div>
       {!video && <div><label htmlFor="file" className="field-label">動画ファイル（MP4・50MiB以下）</label><input id="file" name="file" className="field" type="file" accept="video/mp4,.mp4" required={!uploaded} disabled={!!uploaded} /><p className="mt-2 text-sm text-slate-400">再生互換性のためH.264映像・AAC音声を推奨します。</p></div>}
-      <div><label htmlFor="thumbnail" className="field-label">サムネイル画像URL（任意・HTTPS）</label><input id="thumbnail" name="thumbnail_url" type="url" className="field" maxLength={2048} defaultValue={video?.thumbnail_url ?? ""} /></div>
+      <div className="space-y-3">
+        <label htmlFor="thumbnail-file" className="field-label">サムネイル画像をアップロード（JPG・PNG・WebP／5MiB以下）</label>
+        <input id="thumbnail-file" type="file" accept="image/jpeg,image/png,image/webp" className="field" onChange={event => {
+          const file = event.target.files?.[0] ?? null;
+          if (file && (file.size > 5 * 1024 * 1024 || file.size < 1 || !["image/jpeg", "image/png", "image/webp"].includes(file.type))) {
+            setError("5MiB以下のJPG・PNG・WebP画像を選んでください。");
+            event.target.value = "";
+            setThumbnailFile(null);
+            return;
+          }
+          setError("");
+          setThumbnailFile(file);
+        }} />
+        {(thumbnailPreview || video?.thumbnail_url) && <div className="aspect-video max-w-sm overflow-hidden rounded-lg bg-slate-800">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={thumbnailPreview || video?.thumbnail_url || ""} alt="サムネイルのプレビュー" className="h-full w-full object-cover" />
+        </div>}
+        <label htmlFor="thumbnail" className="field-label">またはサムネイル画像URL（任意・HTTPS）</label><input id="thumbnail" name="thumbnail_url" type="url" className="field" maxLength={2048} defaultValue={video?.thumbnail_url ?? ""} /><p className="text-sm text-slate-400">画像を選択した場合は、URL入力より画像アップロードを優先します。</p></div>
       <label className="flex items-center gap-3"><input type="checkbox" name="is_published" className="h-5 w-5" defaultChecked={video?.is_published} />公開する</label>
       <button type="submit" className="button-primary">{pending ? "処理中…" : uploaded ? "動画情報の保存を再試行" : "保存する"}</button>
     </fieldset>
