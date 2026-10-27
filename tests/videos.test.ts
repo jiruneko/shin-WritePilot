@@ -4,7 +4,7 @@ vi.mock("@/src/lib/supabase/server", () => ({ createClient: async () => ({ auth:
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } }));
 import { prepareUpload, prepareThumbnail, saveVideo, deleteVideo } from "@/app/admin/videos/actions";
-import { completeLesson, renewPlayback } from "@/app/videos/actions";
+import { completeLesson, undoCompleteLesson, renewPlayback } from "@/app/videos/actions";
 import { summarizeProgress, loadLearning } from "@/src/lib/videos/progress";
 import { requireAdmin } from "@/src/lib/auth/profile";
 import { videoMetadata, validateFile, MAX_VIDEO_BYTES } from "@/src/lib/videos/validation";
@@ -115,6 +115,28 @@ describe("server authorization and mutation recovery", () => {
     mocks.from.mockReturnValueOnce(query({ storage_path: "verified/path.mp4" }));
     expect((await renewPlayback(id)).url).toBeTruthy();
     expect(mocks.signed).toHaveBeenCalledWith("verified/path.mp4", 300);
+  });
+});
+describe("undo learning completion", () => {
+  it("removes only the authenticated user's completion and revalidates the UI", async () => {
+    const deletion = query();
+    mocks.from.mockReturnValueOnce(deletion);
+    expect(await undoCompleteLesson(id)).toEqual({ success: true });
+    expect(deletion.delete).toHaveBeenCalled();
+    expect(deletion.eq).toHaveBeenCalledWith("user_id", userId);
+    expect(deletion.eq).toHaveBeenCalledWith("video_id", id);
+    expect(mocks.revalidate).toHaveBeenCalledWith("/videos");
+  });
+  it("rejects anonymous users and invalid IDs", async () => {
+    expect((await undoCompleteLesson("invalid")).error).toBeTruthy();
+    mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: null });
+    expect((await undoCompleteLesson(id)).error).toBeTruthy();
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+  it("does not report success when database deletion fails", async () => {
+    mocks.from.mockReturnValueOnce(query(null, { message: "denied" }));
+    expect((await undoCompleteLesson(id)).error).toBeTruthy();
+    expect(mocks.revalidate).not.toHaveBeenCalled();
   });
 });
 describe("input boundaries", () => {
