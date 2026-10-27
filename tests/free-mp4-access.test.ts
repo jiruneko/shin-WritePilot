@@ -13,7 +13,7 @@ async function readAs(id: string, role = "authenticated") {
   await db.query("select set_config('request.jwt.claim.sub',$1,false),set_config('request.jwt.claim.role',$2,false)", [id, role]);
   await db.exec(`set role ${role}`);
   try {
-    return (await db.query("select id from public.videos order by id")).rows.map(row => row.id);
+    return (await db.query("select id from public.videos order by id")).rows.map(row => (row as { id: string }).id);
   } finally {
     await db.exec("reset role");
   }
