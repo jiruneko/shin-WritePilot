@@ -103,6 +103,10 @@ describe("server authorization and mutation recovery", () => {
   });
 });
 describe("input boundaries", () => {
+  it("accepts a 100 MiB MP4 within the raised upload limit", () => {
+    expect(MAX_VIDEO_BYTES).toBe(500 * 1024 * 1024);
+    expect(validateFile({ name: "lecture.mp4", type: "video/mp4", size: 100 * 1024 * 1024 })).toBeUndefined();
+  });
   it.each([{ name: "x.exe", type: "video/mp4", size: 1 }, { name: "x.mp4", type: "image/png", size: 1 }, { name: "x.mp4", type: "video/mp4", size: 0 }, { name: "x.mp4", type: "video/mp4", size: MAX_VIDEO_BYTES + 1 }])("rejects invalid file %j", file => { expect(validateFile(file)).toBeTruthy(); });
   it.each(["javascript:alert(1)", "http://example.test/x", "https://user:password@example.test/x", "not-a-url"])("rejects unsafe thumbnail %s", url => {
     const f = form(); f.set("thumbnail_url", url); expect(() => videoMetadata(f)).toThrow();
