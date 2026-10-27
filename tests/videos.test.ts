@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ getUser: vi.fn(), from: vi.fn(), info: vi.fn(), remove: vi.fn(), signed: vi.fn(), revalidate: vi.fn() }));
-vi.mock("@/src/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser }, from: mocks.from, storage: { from: () => ({ info: mocks.info, remove: mocks.remove, createSignedUrl: mocks.signed }) } }) }));
+const mocks = vi.hoisted(() => ({ getUser: vi.fn(), from: vi.fn(), rpc: vi.fn(), info: vi.fn(), remove: vi.fn(), signed: vi.fn(), revalidate: vi.fn() }));
+vi.mock("@/src/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser }, from: mocks.from, rpc: mocks.rpc, storage: { from: () => ({ info: mocks.info, remove: mocks.remove, createSignedUrl: mocks.signed }) } }) }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } }));
 import { prepareUpload, saveVideo, deleteVideo } from "@/app/admin/videos/actions";
@@ -24,6 +24,7 @@ beforeEach(() => {
   mocks.getUser.mockResolvedValue({ data: { user: { id: userId } }, error: null });
   mocks.from.mockReturnValue(query({ role: "ADMIN" }));
   mocks.info.mockResolvedValue({ data: { name: `${id}.mp4` }, error: null });
+  mocks.rpc.mockResolvedValue({ data: true, error: null });
   mocks.remove.mockResolvedValue({ error: null });
   mocks.signed.mockResolvedValue({ data: { signedUrl: "https://example.test/signed" }, error: null });
 });
@@ -41,7 +42,7 @@ describe("server authorization and mutation recovery", () => {
     expect((await prepareUpload({ name: "a.mp4", type: "video/mp4", size: 12 })).error).toBeTruthy();
     expect((await saveVideo(id, form(), true)).error).toBeTruthy();
     expect((await deleteVideo(id, true)).error).toBeTruthy();
-    expect(mocks.signed).not.toHaveBeenCalled(); expect(mocks.remove).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled(); expect(mocks.remove).not.toHaveBeenCalled();
   });
   it("allows admin preparation and derives the path from verified identity", async () => {
     const result = await prepareUpload({ name: "a.mp4", type: "video/mp4", size: 100 });
@@ -52,17 +53,17 @@ describe("server authorization and mutation recovery", () => {
     mocks.from.mockReturnValueOnce(query({ role: "ADMIN" })).mockReturnValueOnce(query()).mockReturnValueOnce(insert);
     const f = form(); f.set("storage_path", "victim/file"); f.set("created_by", "victim");
     expect((await saveVideo(id, f, true)).success).toBe(true);
-    expect(mocks.signed).toHaveBeenCalledWith(`${userId}/${id}.mp4`, 60);
+    expect(mocks.rpc).toHaveBeenCalledWith("writepilot_admin_video_exists", { video_id: id });
     expect(insert.insert).toHaveBeenCalledWith(expect.objectContaining({ storage_path: `${userId}/${id}.mp4`, created_by: userId }));
   });
   it("does not register a nonexistent upload", async () => {
-    mocks.signed.mockResolvedValue({ data: null, error: { message: "missing" } });
+    mocks.rpc.mockResolvedValue({ data: false, error: null });
     expect((await saveVideo(id, form(), true)).error).toContain("アップロード済み");
     expect(mocks.from).toHaveBeenCalledTimes(1);
   });
   it("reports a signed URL permission error without deleting an uploaded file", async () => {
-    mocks.signed.mockResolvedValue({ data: null, error: { message: "forbidden" } });
-    expect((await saveVideo(id, form(), true)).error).toContain("読み取り権限");
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: "function missing" } });
+    expect((await saveVideo(id, form(), true)).error).toContain("DB関数");
     expect(mocks.remove).not.toHaveBeenCalled();
     expect(mocks.from).toHaveBeenCalledTimes(1);
   });
@@ -78,7 +79,7 @@ describe("server authorization and mutation recovery", () => {
     mocks.from.mockReturnValueOnce(query({ role: "ADMIN" })).mockReturnValueOnce(update);
     expect((await saveVideo(id, form(), false)).success).toBe(true);
     expect(update.eq).toHaveBeenCalledWith("is_deleting", false);
-    expect(mocks.signed).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
     mocks.from.mockReturnValueOnce(query({ role: "ADMIN" })).mockReturnValueOnce(query());
     expect((await saveVideo(id, form(), false)).error).toBeTruthy();
   });
