@@ -1,4 +1,4 @@
-export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 export const VIDEO_BUCKET = "videos";
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type Video = {
@@ -24,5 +24,5 @@ export function videoMetadata(form: FormData) {
 }
 export function validateFile(file: { name: string; size: number; type: string }) {
   if (!file.name.toLowerCase().endsWith(".mp4") || file.type !== "video/mp4") return "MP4動画を選択してください。";
-  if (!Number.isSafeInteger(file.size) || file.size <= 0 || file.size > MAX_VIDEO_BYTES) return "動画は0バイトより大きく、50MiB以下にしてください。";
+  if (!Number.isSafeInteger(file.size) || file.size <= 0 || file.size > MAX_VIDEO_BYTES) return "動画は0バイトより大きく、500MiB以下にしてください。";
 }
