@@ -3,7 +3,7 @@ const mocks = vi.hoisted(() => ({ getUser: vi.fn(), from: vi.fn(), rpc: vi.fn(),
 vi.mock("@/src/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser }, from: mocks.from, rpc: mocks.rpc, storage: { from: () => ({ info: mocks.info, remove: mocks.remove, createSignedUrl: mocks.signed }) } }) }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } }));
-import { prepareUpload, saveVideo, deleteVideo } from "@/app/admin/videos/actions";
+import { prepareUpload, prepareThumbnail, saveVideo, deleteVideo } from "@/app/admin/videos/actions";
 import { completeLesson, renewPlayback } from "@/app/videos/actions";
 import { summarizeProgress, loadLearning } from "@/src/lib/videos/progress";
 import { requireAdmin } from "@/src/lib/auth/profile";
@@ -43,6 +43,14 @@ describe("server authorization and mutation recovery", () => {
     expect((await saveVideo(id, form(), true)).error).toBeTruthy();
     expect((await deleteVideo(id, true)).error).toBeTruthy();
     expect(mocks.rpc).not.toHaveBeenCalled(); expect(mocks.remove).not.toHaveBeenCalled();
+  });
+  it("authorizes thumbnail paths and validates image size and type", async () => {
+    const ok = await prepareThumbnail({ name: "cover.png", type: "image/png", size: 1024 });
+    expect(ok.path).toMatch(/^00000000-0000-4000-8000-000000000001\/[0-9a-f-]{36}\.png$/);
+    expect((await prepareThumbnail({ name: "cover.svg", type: "image/svg+xml", size: 1024 })).error).toBeTruthy();
+    expect((await prepareThumbnail({ name: "cover.png", type: "image/png", size: 6 * 1024 * 1024 })).error).toBeTruthy();
+    mocks.from.mockReturnValue(query({ role: "USER" }));
+    expect((await prepareThumbnail({ name: "cover.png", type: "image/png", size: 1024 })).error).toBeTruthy();
   });
   it("allows admin preparation and derives the path from verified identity", async () => {
     const result = await prepareUpload({ name: "a.mp4", type: "video/mp4", size: 100 });

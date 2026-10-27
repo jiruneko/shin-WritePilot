@@ -29,6 +29,17 @@ export async function prepareUpload(file: { name: string; size: number; type: st
   } catch { return failure; }
 }
 
+export async function prepareThumbnail(file: { name: string; size: number; type: string }): Promise<VideoResult> {
+  try {
+    const { user } = await adminContext();
+    const types: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+    const ext = types[file.type];
+    if (!ext || !/\.(jpe?g|png|webp)$/i.test(file.name) || !Number.isSafeInteger(file.size) || file.size < 1 || file.size > 5 * 1024 * 1024)
+      return { error: "サムネイルには5MiB以下のJPG・PNG・WebP画像を選択してください。" };
+    return { path: `${user.id}/${crypto.randomUUID()}.${ext}` };
+  } catch { return failure; }
+}
+
 export async function saveVideo(id: string, form: FormData, isNew: boolean): Promise<VideoResult> {
   try {
     const { supabase, user } = await adminContext();
