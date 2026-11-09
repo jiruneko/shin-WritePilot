@@ -13,7 +13,8 @@ revoke all on private.video_quizzes from public, anon, authenticated;
 with target as (
   select id, count(*) over () as matches
   from public.videos
-  where title like '[第1回] コンピュータとは？%'
+  where (title like '[第1回] コンピュータとは？%'
+      or title like '【第1回】 コンピュータとは？%')
     and storage_path is not null and is_published and not is_deleting
 )
 insert into private.video_quizzes (video_id, questions)

@@ -54,6 +54,9 @@ beforeAll(async () => {
       using (private.can_view_lesson(id));
   `);
   await db.exec(readFileSync(new URL("../supabase/migrations/202610270004_free_mp4_read_access.sql", import.meta.url), "utf8"));
+  await db.query("update public.videos set title = $1 where id = $2", [
+    "【第1回】 コンピュータとは？仕組みをゼロから学ぼう！ | IT's てらこや", free,
+  ]);
   await db.exec(readFileSync(new URL("../supabase/migrations/202611100001_video_comprehension_quiz.sql", import.meta.url), "utf8"));
 }, 30000);
 afterAll(async () => { await db?.close(); });
@@ -62,7 +65,7 @@ describe("free MP4 access control migration", () => {
   it("labels only the selected launch lesson free", async () => {
     expect((await db.query("select title,access_level from public.videos order by id")).rows)
       .toEqual([
-        { title: "[第1回] コンピュータとは？基礎入門", access_level: "FREE" },
+        { title: "【第1回】 コンピュータとは？仕組みをゼロから学ぼう！ | IT's てらこや", access_level: "FREE" },
         { title: "Premium course", access_level: "PAID" },
         { title: "Hidden course", access_level: "PAID" },
       ]);
