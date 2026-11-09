@@ -5,6 +5,7 @@ import { LmsShell } from "@/app/components/lms-shell";
 import { VideoPlayer } from "@/app/components/video-player";
 import { VIDEO_BUCKET, UUID } from "@/src/lib/videos/validation";
 import { CompleteLessonButton } from "@/app/components/complete-lesson-button";
+import { VideoQuiz, type QuizQuestion } from "@/app/components/video-quiz";
 export const dynamic = "force-dynamic";
 export default async function VideoPage({ params }: { params: Promise<{ id: string }> }) {
   const { user, profile, supabase } = await requireProfile();
@@ -20,6 +21,10 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
   const { data: completion, error: completionError } = await supabase.from("video_completions")
     .select("video_id").eq("user_id", user.id).eq("video_id", id).maybeSingle();
   if (completionError) throw new Error("学習完了の状態を取得できませんでした。再読み込みしてください。");
+  const canPlay = video.storage_path ? !!data?.signedUrl : /^[A-Za-z0-9_-]{11}$/.test(video.youtube_id ?? "");
+  const { data: questions, error: quizError } = video.is_published && canPlay
+    ? await supabase.rpc("video_quiz", { lesson_id: id })
+    : { data: null, error: null };
   return <LmsShell title={video.title} admin={profile.role === "ADMIN"}>
     {!video.is_published && <p className="mb-4 text-amber-200">非公開動画の管理者プレビュー</p>}
     {video.is_sample && <p className="mb-4 text-amber-200">サンプル教材：操作体験用のデモ映像です。正式な講義ではありません。</p>}
@@ -30,6 +35,8 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
     {video.storage_path && <p className="mt-3 text-sm text-slate-400">再生が途切れた場合は再生URLを自動更新します。改善しない場合は「再生を再試行」を押してください。</p>}
     <p className="my-8 whitespace-pre-wrap break-words leading-8 text-slate-300">{video.description || "説明はありません。"}</p>
     {video.is_published && <CompleteLessonButton key={`${user.id}:${id}`} id={id} completed={!!completion} />}
+    {Array.isArray(questions) && <VideoQuiz key={`${user.id}:${id}`} id={id} questions={questions as QuizQuestion[]} />}
+    {quizError && quizError.code !== "PGRST202" && <p role="alert" className="mb-4 text-red-200">理解度テストを取得できませんでした。再読み込みしてください。</p>}
     <Link href="/videos" className="button-secondary">動画一覧へ戻る</Link>
   </LmsShell>;
 }

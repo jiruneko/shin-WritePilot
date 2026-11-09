@@ -4,7 +4,7 @@ vi.mock("@/src/lib/supabase/server", () => ({ createClient: async () => ({ auth:
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } }));
 import { prepareUpload, prepareThumbnail, saveVideo, deleteVideo } from "@/app/admin/videos/actions";
-import { completeLesson, undoCompleteLesson, renewPlayback } from "@/app/videos/actions";
+import { completeLesson, undoCompleteLesson, renewPlayback, submitVideoQuiz } from "@/app/videos/actions";
 import { summarizeProgress, loadLearning } from "@/src/lib/videos/progress";
 import { requireAdmin } from "@/src/lib/auth/profile";
 import { videoMetadata, validateFile, MAX_VIDEO_BYTES } from "@/src/lib/videos/validation";
@@ -200,5 +200,29 @@ describe("learning progress actions and reads", () => {
     expect(read.eq).toHaveBeenCalledWith("video_completions.user_id", userId);
     mocks.from.mockReturnValueOnce(query(null, { message: "offline" }));
     await expect(loadLearning(client, userId)).rejects.toThrow("取得できません");
+  });
+});
+
+describe("quiz submission", () => {
+  it.each([
+    [[true, true, true], 3],
+    [[true, false, true], 2],
+    [[false, false, false], 0],
+  ])("returns %j with score %s", async (correct, score) => {
+    mocks.rpc.mockResolvedValue({ data: correct, error: null });
+    expect(await submitVideoQuiz(id, [1, 2, 0])).toEqual({ correct, score });
+    expect(mocks.rpc).toHaveBeenCalledWith("video_quiz", { lesson_id: id, answers: [1, 2, 0] });
+  });
+
+  it("requires a valid submission and a verified user", async () => {
+    expect((await submitVideoQuiz(id, [1, 2])).error).toBeTruthy();
+    mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
+    expect((await submitVideoQuiz(id, [1, 2, 0])).error).toContain("ログイン");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("returns no result when the database denies access", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: null });
+    expect(await submitVideoQuiz(id, [1, 2, 0])).toEqual({ error: "この理解度テストを利用できません。" });
   });
 });

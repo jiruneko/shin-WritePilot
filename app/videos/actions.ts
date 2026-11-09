@@ -54,3 +54,28 @@ export async function undoCompleteLesson(id: string): Promise<{ success?: boolea
     return { success: true };
   } catch { return { error: "通信に失敗しました。再試行してください。" }; }
 }
+
+export async function submitVideoQuiz(id: string, answers: number[]) {
+  if (typeof id !== "string" || !UUID.test(id) || !Array.isArray(answers)
+    || answers.length !== 3 || !answers.every(answer => Number.isInteger(answer) && answer >= 0 && answer < 3)) {
+    return { error: "各問題の回答を選んでください。" };
+  }
+
+  try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return { error: "もう一度ログインしてください。" };
+
+    // The RPC checks current lesson access even when called outside this action.
+    const { data, error } = await supabase.rpc("video_quiz", { lesson_id: id, answers });
+    if (error) return { error: "採点できませんでした。再試行してください。" };
+    if (!Array.isArray(data) || data.length !== answers.length
+      || !data.every((value): value is boolean => typeof value === "boolean")) {
+      return { error: "この理解度テストを利用できません。" };
+    }
+
+    return { correct: data, score: data.filter(Boolean).length };
+  } catch {
+    return { error: "通信に失敗しました。再試行してください。" };
+  }
+}
