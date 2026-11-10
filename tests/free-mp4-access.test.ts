@@ -150,3 +150,18 @@ describe("video comprehension quiz", () => {
     }
   });
 });
+
+it("prefers the known launch UUID when multiple videos have the same title", async () => {
+  const launchId = "52fb387f-e7b5-4b74-9b7e-264cd644d86d";
+  const migration = readFileSync(new URL("../supabase/migrations/202611100001_video_comprehension_quiz.sql", import.meta.url), "utf8");
+  const seed = migration.slice(migration.indexOf("with candidates as"), migration.indexOf("-- NULL requests"));
+  await db.exec("begin");
+  try {
+    await db.query("insert into public.videos (id, title, storage_path, is_published) select $1, title, 'launch.mp4', true from public.videos where id = $2", [launchId, free]);
+    await db.exec("delete from private.video_quizzes");
+    await db.exec(seed);
+    expect((await db.query("select video_id from private.video_quizzes")).rows).toEqual([{ video_id: launchId }]);
+  } finally {
+    await db.exec("rollback");
+  }
+});

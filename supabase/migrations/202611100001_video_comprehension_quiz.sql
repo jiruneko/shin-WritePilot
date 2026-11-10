@@ -9,13 +9,18 @@ create table private.video_quizzes (
 alter table private.video_quizzes enable row level security;
 revoke all on private.video_quizzes from public, anon, authenticated;
 
--- Bind to the existing Japanese launch video. Skip absent or ambiguous matches.
-with target as (
-  select id, count(*) over () as matches
+-- Prefer the verified launch video UUID. In another environment, use a
+-- uniquely matching published MP4, which may have a different UUID.
+with candidates as (
+  select id, id = '52fb387f-e7b5-4b74-9b7e-264cd644d86d'::uuid as exact_match
   from public.videos
-  where (title like '[第1回] コンピュータとは？%'
+  where storage_path is not null and is_published and not is_deleting
+    and (id = '52fb387f-e7b5-4b74-9b7e-264cd644d86d'::uuid
+      or title like '[第1回] コンピュータとは？%'
       or title like '【第1回】 コンピュータとは？%')
-    and storage_path is not null and is_published and not is_deleting
+), target as (
+  select id from candidates
+  where exact_match or (select count(*) from candidates) = 1
 )
 insert into private.video_quizzes (video_id, questions)
 select id, '[
@@ -23,7 +28,7 @@ select id, '[
   {"prompt":"文字を入力するとき、入力装置として使うものはどれですか？","options":["ディスプレイ","スピーカー","キーボード"],"correct":2},
   {"prompt":"コンピュータが処理した結果を紙に出す装置はどれですか？","options":["プリンター","マウス","マイク"],"correct":0}
 ]'::jsonb
-from target where matches = 1;
+from target;
 
 -- NULL requests the public question fields. Submissions return only correctness.
 create function public.video_quiz(lesson_id uuid, answers integer[] default null)
