@@ -1,3 +1,4 @@
+import { analyzeWeakness } from "@/src/lib/videos/quiz-feedback";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireProfile } from "@/src/lib/auth/profile";
@@ -29,13 +30,14 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
   const historyResult = await (async () => {
     try {
       return await supabase.from("video_quiz_attempts")
-        .select("id,correct_count,question_count,percentage,taken_at").eq("user_id", user.id).eq("video_id", id)
+        .select("id,correct_count,question_count,percentage,taken_at,questions,answers,correct").eq("user_id", user.id).eq("video_id", id)
         .order("taken_at", { ascending: false }).limit(20);
     } catch {
       return { data: null, error: { code: "FETCH_ERROR", message: "history unavailable" } };
     }
   })();
   const { data: history, error: historyError } = historyResult;
+  const analysis = analyzeWeakness(history ?? []);
   return <LmsShell title={video.title} admin={profile.role === "ADMIN"}>
     {!video.is_published && <p className="mb-4 text-amber-200">非公開動画の管理者プレビュー</p>}
     {video.is_sample && <p className="mb-4 text-amber-200">サンプル教材：操作体験用のデモ映像です。正式な講義ではありません。</p>}
@@ -55,6 +57,16 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
     {video.is_published && !quizError && (!Array.isArray(questions) || questions.length === 0) && <p role="status" className="mb-4 text-amber-200">
       この動画の理解度テストを取得できませんでした。テスト未登録、または受験権限がない可能性があります。
     </p>}
+    <section className="mb-8" aria-label="弱点分析">
+      <h2 className="text-xl font-semibold">分野別の学習状況</h2>
+      <p>この動画の最新20回の受験を集計しています。各分野の回答5件未満は参考値です。同じ問題の繰り返しを含み、理解度を保証するものではありません。</p>
+      {historyError ? <p>履歴を取得できないため、分析を表示できません。</p> : analysis.length === 0 ? <p>分析できる回答はまだありません。テストに回答すると表示されます。カテゴリ未設定の問題は集計対象外です。</p> : <ul>
+        {analysis.map(item => <li key={item.category} className="mt-3 rounded-xl border border-slate-700 p-3">
+          <p className="font-semibold">{item.category}：{item.percentage}%（{item.total}問中{item.correct}問正解）</p>
+          <p>{item.weak ? "復習するとよい分野です。" : "よくできています。"} {item.provisional && "回答が少ないため参考値です。苦手分野の判断は暫定です。"}</p>
+        </li>)}
+      </ul>}
+    </section>
     <section className="mb-8" aria-label="受験履歴">
       <h2 className="text-xl font-semibold">過去の受験履歴（最新20件）</h2>
       {historyError ? <p role="alert">{["PGRST205", "42P01"].includes(historyError.code)
