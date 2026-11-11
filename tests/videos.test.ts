@@ -4,7 +4,7 @@ vi.mock("@/src/lib/supabase/server", () => ({ createClient: async () => ({ auth:
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } }));
 import { prepareUpload, prepareThumbnail, saveVideo, deleteVideo } from "@/app/admin/videos/actions";
-import { completeLesson, undoCompleteLesson, renewPlayback } from "@/app/videos/actions";
+import { completeLesson, undoCompleteLesson, renewPlayback, submitVideoQuiz } from "@/app/videos/actions";
 import { summarizeProgress, loadLearning } from "@/src/lib/videos/progress";
 import { requireAdmin } from "@/src/lib/auth/profile";
 import { videoMetadata, validateFile, MAX_VIDEO_BYTES } from "@/src/lib/videos/validation";
@@ -200,5 +200,43 @@ describe("learning progress actions and reads", () => {
     expect(read.eq).toHaveBeenCalledWith("video_completions.user_id", userId);
     mocks.from.mockReturnValueOnce(query(null, { message: "offline" }));
     await expect(loadLearning(client, userId)).rejects.toThrow("取得できません");
+  });
+});
+
+describe("quiz submission", () => {
+  it("reports missing history migration without pretending the answer was saved", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: "PGRST202" } });
+    const result = await submitVideoQuiz(id, [1,2,0], id);
+    expect(result.error).toContain("DB準備が完了していません");
+    expect(result.saved).not.toBe(true);
+  });
+  it("reports save failure and retries using the same idempotency key", async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: null, error: { message: "offline" } });
+    expect((await submitVideoQuiz(id, [1, 2, 0], id)).error).toContain("保存できません");
+    mocks.rpc.mockResolvedValueOnce({ data: { correct: [true,true,true], correct_count: 3, percentage: 100 }, error: null });
+    expect((await submitVideoQuiz(id, [1, 2, 0], id)).saved).toBe(true);
+    expect(mocks.rpc.mock.calls[0]).toEqual(mocks.rpc.mock.calls[1]);
+  });
+
+  it.each([
+    [[true, true, true], 3],
+    [[true, false, true], 2],
+    [[false, false, false], 0],
+  ])("returns %j with score %s", async (correct, score) => {
+    mocks.rpc.mockResolvedValue({ data: { correct, correct_count: score, percentage: Math.round(score / 3 * 100) }, error: null });
+    expect(await submitVideoQuiz(id, [1, 2, 0], id)).toEqual({ correct, score, percentage: Math.round(score / 3 * 100), saved: true });
+    expect(mocks.rpc).toHaveBeenCalledWith("submit_video_quiz", { lesson_id: id, answers: [1, 2, 0], request_id: id });
+  });
+
+  it("requires a valid submission and a verified user", async () => {
+    expect((await submitVideoQuiz(id, [1, 2], id)).error).toBeTruthy();
+    mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
+    expect((await submitVideoQuiz(id, [1, 2, 0], id)).error).toContain("ログイン");
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("returns no result when the database denies access", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: null });
+    expect(await submitVideoQuiz(id, [1, 2, 0], id)).toEqual({ error: "この理解度テストを利用できません。" });
   });
 });

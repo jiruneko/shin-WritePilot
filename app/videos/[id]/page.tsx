@@ -5,6 +5,7 @@ import { LmsShell } from "@/app/components/lms-shell";
 import { VideoPlayer } from "@/app/components/video-player";
 import { VIDEO_BUCKET, UUID } from "@/src/lib/videos/validation";
 import { CompleteLessonButton } from "@/app/components/complete-lesson-button";
+import { VideoQuiz, type QuizQuestion } from "@/app/components/video-quiz";
 export const dynamic = "force-dynamic";
 export default async function VideoPage({ params }: { params: Promise<{ id: string }> }) {
   const { user, profile, supabase } = await requireProfile();
@@ -20,6 +21,21 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
   const { data: completion, error: completionError } = await supabase.from("video_completions")
     .select("video_id").eq("user_id", user.id).eq("video_id", id).maybeSingle();
   if (completionError) throw new Error("学習完了の状態を取得できませんでした。再読み込みしてください。");
+  // Quiz access is decided by its authenticated RPC, independently of Storage signing.
+  const { data: questions, error: quizError } = video.is_published
+    ? await supabase.rpc("video_quiz", { lesson_id: id })
+    : { data: null, error: null };
+  // A history outage must not prevent the existing quiz from rendering.
+  const historyResult = await (async () => {
+    try {
+      return await supabase.from("video_quiz_attempts")
+        .select("id,correct_count,question_count,percentage,taken_at").eq("user_id", user.id).eq("video_id", id)
+        .order("taken_at", { ascending: false }).limit(20);
+    } catch {
+      return { data: null, error: { code: "FETCH_ERROR", message: "history unavailable" } };
+    }
+  })();
+  const { data: history, error: historyError } = historyResult;
   return <LmsShell title={video.title} admin={profile.role === "ADMIN"}>
     {!video.is_published && <p className="mb-4 text-amber-200">非公開動画の管理者プレビュー</p>}
     {video.is_sample && <p className="mb-4 text-amber-200">サンプル教材：操作体験用のデモ映像です。正式な講義ではありません。</p>}
@@ -29,7 +45,27 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
     </div> : signingError || !data ? <p role="alert" className="rounded-xl border border-red-400/30 p-5 text-red-200">再生URLを取得できませんでした。時間をおいて再読み込みしてください。</p> : <VideoPlayer src={data.signedUrl} id={id} />}
     {video.storage_path && <p className="mt-3 text-sm text-slate-400">再生が途切れた場合は再生URLを自動更新します。改善しない場合は「再生を再試行」を押してください。</p>}
     <p className="my-8 whitespace-pre-wrap break-words leading-8 text-slate-300">{video.description || "説明はありません。"}</p>
-    {video.is_published && <CompleteLessonButton key={`${user.id}:${id}`} id={id} completed={!!completion} />}
+    {video.is_published && <CompleteLessonButton key={`completion:${user.id}:${id}`} id={id} completed={!!completion} />}
+    {Array.isArray(questions) && questions.length > 0 && <VideoQuiz key={`quiz:${user.id}:${id}`} id={id} questions={questions as QuizQuestion[]} />}
+    {quizError && <p role="alert" className="mb-4 text-red-200">
+      {quizError.code === "PGRST202"
+        ? "理解度テストを取得できません。接続先のクイズ機能が未適用、またはAPIに反映されていない可能性があります。"
+        : "理解度テストを取得できませんでした。再読み込みしてください。"}
+    </p>}
+    {video.is_published && !quizError && (!Array.isArray(questions) || questions.length === 0) && <p role="status" className="mb-4 text-amber-200">
+      この動画の理解度テストを取得できませんでした。テスト未登録、または受験権限がない可能性があります。
+    </p>}
+    <section className="mb-8" aria-label="受験履歴">
+      <h2 className="text-xl font-semibold">過去の受験履歴（最新20件）</h2>
+      {historyError ? <p role="alert">{["PGRST205", "42P01"].includes(historyError.code)
+        ? "履歴保存機能のDB準備が完了していません。クイズの表示は利用できますが、回答の保存には管理者の対応が必要です。"
+        : "履歴を取得できませんでした。ページを再読み込みしてください。"}</p> :
+        <ul>{history?.map(attempt => <li key={attempt.id}>
+          {new Date(attempt.taken_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}：
+          {attempt.question_count}問中{attempt.correct_count}問正解（{attempt.percentage}%）
+        </li>)}</ul>}
+      {!historyError && !history?.length && <p>受験履歴はまだありません。</p>}
+    </section>
     <Link href="/videos" className="button-secondary">動画一覧へ戻る</Link>
   </LmsShell>;
 }

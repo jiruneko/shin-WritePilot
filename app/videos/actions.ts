@@ -54,3 +54,35 @@ export async function undoCompleteLesson(id: string): Promise<{ success?: boolea
     return { success: true };
   } catch { return { error: "通信に失敗しました。再試行してください。" }; }
 }
+
+export async function submitVideoQuiz(id: string, answers: number[], submissionId: string) {
+  if (typeof id !== "string" || !UUID.test(id) || !Array.isArray(answers)
+    || typeof submissionId !== "string" || !UUID.test(submissionId)
+    || answers.length !== 3 || !answers.every(answer => Number.isInteger(answer) && answer >= 0 && answer < 3)) {
+    return { error: "各問題の回答を選んでください。" };
+  }
+
+  try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return { error: "もう一度ログインしてください。" };
+
+    // The RPC checks current lesson access even when called outside this action.
+    const { data, error } = await supabase.rpc("submit_video_quiz", { lesson_id: id, answers, request_id: submissionId });
+    if (error) {
+      if (["PGRST202", "PGRST205", "42P01", "42703", "42883"].includes(error.code)) {
+        return { error: "履歴保存機能のDB準備が完了していません。管理者に連絡してください。回答は保存されていません。" };
+      }
+      return { error: "採点結果を保存できませんでした。同じ回答で再試行してください。" };
+    }
+    if (!data || !Array.isArray(data.correct) || data.correct.length !== answers.length
+      || !data.correct.every((value: unknown): value is boolean => typeof value === "boolean")) {
+      return { error: "この理解度テストを利用できません。" };
+    }
+
+    revalidatePath(`/videos/${id}`);
+    return { correct: data.correct as boolean[], score: data.correct_count as number, percentage: data.percentage as number, saved: true };
+  } catch {
+    return { error: "通信に失敗しました。再試行してください。" };
+  }
+}
