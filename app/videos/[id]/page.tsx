@@ -21,13 +21,21 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
   const { data: completion, error: completionError } = await supabase.from("video_completions")
     .select("video_id").eq("user_id", user.id).eq("video_id", id).maybeSingle();
   if (completionError) throw new Error("学習完了の状態を取得できませんでした。再読み込みしてください。");
-  const canPlay = video.storage_path ? !!data?.signedUrl : /^[A-Za-z0-9_-]{11}$/.test(video.youtube_id ?? "");
-  const { data: questions, error: quizError } = video.is_published && canPlay
+  // Quiz access is decided by its authenticated RPC, independently of Storage signing.
+  const { data: questions, error: quizError } = video.is_published
     ? await supabase.rpc("video_quiz", { lesson_id: id })
     : { data: null, error: null };
-  const { data: history, error: historyError } = await supabase.from("video_quiz_attempts")
-    .select("id,correct_count,question_count,percentage,taken_at").eq("user_id", user.id).eq("video_id", id)
-    .order("taken_at", { ascending: false }).limit(20);
+  // A history outage must not prevent the existing quiz from rendering.
+  const historyResult = await (async () => {
+    try {
+      return await supabase.from("video_quiz_attempts")
+        .select("id,correct_count,question_count,percentage,taken_at").eq("user_id", user.id).eq("video_id", id)
+        .order("taken_at", { ascending: false }).limit(20);
+    } catch {
+      return { data: null, error: { message: "history unavailable" } };
+    }
+  })();
+  const { data: history, error: historyError } = historyResult;
   return <LmsShell title={video.title} admin={profile.role === "ADMIN"}>
     {!video.is_published && <p className="mb-4 text-amber-200">非公開動画の管理者プレビュー</p>}
     {video.is_sample && <p className="mb-4 text-amber-200">サンプル教材：操作体験用のデモ映像です。正式な講義ではありません。</p>}
@@ -38,8 +46,15 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
     {video.storage_path && <p className="mt-3 text-sm text-slate-400">再生が途切れた場合は再生URLを自動更新します。改善しない場合は「再生を再試行」を押してください。</p>}
     <p className="my-8 whitespace-pre-wrap break-words leading-8 text-slate-300">{video.description || "説明はありません。"}</p>
     {video.is_published && <CompleteLessonButton key={`${user.id}:${id}`} id={id} completed={!!completion} />}
-    {Array.isArray(questions) && <VideoQuiz key={`${user.id}:${id}`} id={id} questions={questions as QuizQuestion[]} />}
-    {quizError && quizError.code !== "PGRST202" && <p role="alert" className="mb-4 text-red-200">理解度テストを取得できませんでした。再読み込みしてください。</p>}
+    {Array.isArray(questions) && questions.length > 0 && <VideoQuiz key={`${user.id}:${id}`} id={id} questions={questions as QuizQuestion[]} />}
+    {quizError && <p role="alert" className="mb-4 text-red-200">
+      {quizError.code === "PGRST202"
+        ? "理解度テストを取得できません。接続先のクイズ機能が未適用、またはAPIに反映されていない可能性があります。"
+        : "理解度テストを取得できませんでした。再読み込みしてください。"}
+    </p>}
+    {video.is_published && !quizError && (!Array.isArray(questions) || questions.length === 0) && <p role="status" className="mb-4 text-amber-200">
+      この動画の理解度テストを取得できませんでした。テスト未登録、または受験権限がない可能性があります。
+    </p>}
     <section className="mb-8" aria-label="受験履歴">
       <h2 className="text-xl font-semibold">過去の受験履歴（最新20件）</h2>
       {historyError ? <p role="alert">履歴を取得できませんでした。ページを再読み込みしてください。</p> :

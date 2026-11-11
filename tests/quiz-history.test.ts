@@ -53,7 +53,9 @@ beforeAll(async () => {
   ]);
   await db.exec(readFileSync(new URL("../supabase/migrations/202611100001_video_comprehension_quiz.sql", import.meta.url), "utf8"));
   await db.exec(`insert into auth.users values ('${learner}'), ('${admin}')`);
+  const original = (await db.query("select video_id, questions from private.video_quizzes")).rows;
   await db.exec(readFileSync(new URL("../supabase/migrations/202611110001_quiz_attempt_history.sql", import.meta.url), "utf8"));
+  expect((await db.query("select video_id, questions from private.video_quizzes")).rows).toEqual(original);
 }, 30000);
 afterAll(async () => { await db?.close(); });
 
