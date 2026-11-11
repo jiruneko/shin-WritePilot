@@ -61,7 +61,7 @@ describe("quiz display alongside persistent history", () => {
   it.each([false,true])("keeps quiz visible when history fails (throws=%s)", async reject => {
     fixture(true,reject);
     const markup=await html();
-    expect(markup).toContain("履歴を取得できません"); expect(markup.match(/<fieldset/g)).toHaveLength(3);
+    expect(markup).toContain(reject ? "履歴を取得できません" : "履歴保存機能のDB準備が完了していません"); expect(markup.match(/<fieldset/g)).toHaveLength(3);
   });
   it("shows a missing RPC error instead of silently hiding the quiz", async () => {
     mocks.rpc.mockResolvedValue({ data: null, error: { code: "PGRST202" } });

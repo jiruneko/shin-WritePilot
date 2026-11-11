@@ -54,8 +54,12 @@ beforeAll(async () => {
   await db.exec(readFileSync(new URL("../supabase/migrations/202611100001_video_comprehension_quiz.sql", import.meta.url), "utf8"));
   await db.exec(`insert into auth.users values ('${learner}'), ('${admin}')`);
   const original = (await db.query("select video_id, questions from private.video_quizzes")).rows;
+  const videos = (await db.query("select * from public.videos order by id")).rows;
+  const entitlements = (await db.query("select * from public.video_entitlements order by video_id, user_id")).rows;
   await db.exec(readFileSync(new URL("../supabase/migrations/202611110001_quiz_attempt_history.sql", import.meta.url), "utf8"));
   expect((await db.query("select video_id, questions from private.video_quizzes")).rows).toEqual(original);
+  expect((await db.query("select * from public.videos order by id")).rows).toEqual(videos);
+  expect((await db.query("select * from public.video_entitlements order by video_id, user_id")).rows).toEqual(entitlements);
 }, 30000);
 afterAll(async () => { await db?.close(); });
 
@@ -95,6 +99,24 @@ describe("persistent quiz attempts", () => {
    });
    await withDatabaseRole("","anon",async () => {
      await expect(submit([1,2,0],key(14))).rejects.toMatchObject({code:"42501"});
+   });
+ });
+ it("rolls back a failed insert and safely retries the same submission", async () => {
+   const original = (await db.query("select count(*) as n from public.video_quiz_attempts")).rows;
+   await db.exec(`create function public.reject_test_attempt() returns trigger language plpgsql as $$ begin raise exception 'simulated storage failure'; end $$;
+     create trigger test_failure before insert on public.video_quiz_attempts for each row execute function public.reject_test_attempt();`);
+   try {
+     await withDatabaseRole(learner,"authenticated",async () => {
+       await expect(submit([1,2,0], key(100))).rejects.toThrow(/simulated storage failure/);
+     });
+     expect((await db.query("select count(*) as n from public.video_quiz_attempts")).rows).toEqual(original);
+   } finally {
+     await db.exec("drop trigger test_failure on public.video_quiz_attempts; drop function public.reject_test_attempt()");
+   }
+   await withDatabaseRole(learner,"authenticated",async () => {
+     const saved = await submit([1,2,0],key(100));
+     expect(saved.rows[0].result.correct_count).toBe(3);
+     expect((await submit([1,2,0],key(100))).rows).toEqual(saved.rows);
    });
  });
 });

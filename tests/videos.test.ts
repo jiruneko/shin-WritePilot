@@ -204,6 +204,12 @@ describe("learning progress actions and reads", () => {
 });
 
 describe("quiz submission", () => {
+  it("reports missing history migration without pretending the answer was saved", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: "PGRST202" } });
+    const result = await submitVideoQuiz(id, [1,2,0], id);
+    expect(result.error).toContain("DB準備が完了していません");
+    expect(result.saved).not.toBe(true);
+  });
   it("reports save failure and retries using the same idempotency key", async () => {
     mocks.rpc.mockResolvedValueOnce({ data: null, error: { message: "offline" } });
     expect((await submitVideoQuiz(id, [1, 2, 0], id)).error).toContain("保存できません");

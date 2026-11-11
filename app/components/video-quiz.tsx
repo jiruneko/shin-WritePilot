@@ -43,7 +43,7 @@ export function VideoQuiz({ id, questions }: { id: string; questions: QuizQuesti
         </label>)}
       </fieldset>)}
       <button type="submit" disabled={pending || !!result?.saved} className="button-primary disabled:opacity-60">
-        {pending ? "採点中…" : "回答を提出する"}
+        {pending ? "採点・保存中…" : result?.saved ? "保存済み" : result?.error ? "同じ回答で再試行する" : "回答を提出する"}
       </button>
     </form>
     {result?.error && <p role="alert" className="mt-3 text-red-300">{result.error}</p>}

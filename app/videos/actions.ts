@@ -69,7 +69,12 @@ export async function submitVideoQuiz(id: string, answers: number[], submissionI
 
     // The RPC checks current lesson access even when called outside this action.
     const { data, error } = await supabase.rpc("submit_video_quiz", { lesson_id: id, answers, request_id: submissionId });
-    if (error) return { error: "採点結果を保存できませんでした。同じ回答で再試行してください。" };
+    if (error) {
+      if (["PGRST202", "PGRST205", "42P01", "42703", "42883"].includes(error.code)) {
+        return { error: "履歴保存機能のDB準備が完了していません。管理者に連絡してください。回答は保存されていません。" };
+      }
+      return { error: "採点結果を保存できませんでした。同じ回答で再試行してください。" };
+    }
     if (!data || !Array.isArray(data.correct) || data.correct.length !== answers.length
       || !data.correct.every((value: unknown): value is boolean => typeof value === "boolean")) {
       return { error: "この理解度テストを利用できません。" };

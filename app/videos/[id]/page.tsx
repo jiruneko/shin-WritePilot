@@ -32,7 +32,7 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
         .select("id,correct_count,question_count,percentage,taken_at").eq("user_id", user.id).eq("video_id", id)
         .order("taken_at", { ascending: false }).limit(20);
     } catch {
-      return { data: null, error: { message: "history unavailable" } };
+      return { data: null, error: { code: "FETCH_ERROR", message: "history unavailable" } };
     }
   })();
   const { data: history, error: historyError } = historyResult;
@@ -57,7 +57,9 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
     </p>}
     <section className="mb-8" aria-label="受験履歴">
       <h2 className="text-xl font-semibold">過去の受験履歴（最新20件）</h2>
-      {historyError ? <p role="alert">履歴を取得できませんでした。ページを再読み込みしてください。</p> :
+      {historyError ? <p role="alert">{["PGRST205", "42P01"].includes(historyError.code)
+        ? "履歴保存機能のDB準備が完了していません。クイズの表示は利用できますが、回答の保存には管理者の対応が必要です。"
+        : "履歴を取得できませんでした。ページを再読み込みしてください。"}</p> :
         <ul>{history?.map(attempt => <li key={attempt.id}>
           {new Date(attempt.taken_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}：
           {attempt.question_count}問中{attempt.correct_count}問正解（{attempt.percentage}%）
