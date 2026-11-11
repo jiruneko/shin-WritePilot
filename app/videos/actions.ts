@@ -55,8 +55,9 @@ export async function undoCompleteLesson(id: string): Promise<{ success?: boolea
   } catch { return { error: "通信に失敗しました。再試行してください。" }; }
 }
 
-export async function submitVideoQuiz(id: string, answers: number[]) {
+export async function submitVideoQuiz(id: string, answers: number[], submissionId: string) {
   if (typeof id !== "string" || !UUID.test(id) || !Array.isArray(answers)
+    || typeof submissionId !== "string" || !UUID.test(submissionId)
     || answers.length !== 3 || !answers.every(answer => Number.isInteger(answer) && answer >= 0 && answer < 3)) {
     return { error: "各問題の回答を選んでください。" };
   }
@@ -67,14 +68,15 @@ export async function submitVideoQuiz(id: string, answers: number[]) {
     if (authError || !user) return { error: "もう一度ログインしてください。" };
 
     // The RPC checks current lesson access even when called outside this action.
-    const { data, error } = await supabase.rpc("video_quiz", { lesson_id: id, answers });
-    if (error) return { error: "採点できませんでした。再試行してください。" };
-    if (!Array.isArray(data) || data.length !== answers.length
-      || !data.every((value): value is boolean => typeof value === "boolean")) {
+    const { data, error } = await supabase.rpc("submit_video_quiz", { lesson_id: id, answers, request_id: submissionId });
+    if (error) return { error: "採点結果を保存できませんでした。同じ回答で再試行してください。" };
+    if (!data || !Array.isArray(data.correct) || data.correct.length !== answers.length
+      || !data.correct.every((value: unknown): value is boolean => typeof value === "boolean")) {
       return { error: "この理解度テストを利用できません。" };
     }
 
-    return { correct: data, score: data.filter(Boolean).length };
+    revalidatePath(`/videos/${id}`);
+    return { correct: data.correct as boolean[], score: data.correct_count as number, percentage: data.percentage as number, saved: true };
   } catch {
     return { error: "通信に失敗しました。再試行してください。" };
   }

@@ -25,6 +25,9 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
   const { data: questions, error: quizError } = video.is_published && canPlay
     ? await supabase.rpc("video_quiz", { lesson_id: id })
     : { data: null, error: null };
+  const { data: history, error: historyError } = await supabase.from("video_quiz_attempts")
+    .select("id,correct_count,question_count,percentage,taken_at").eq("user_id", user.id).eq("video_id", id)
+    .order("taken_at", { ascending: false }).limit(20);
   return <LmsShell title={video.title} admin={profile.role === "ADMIN"}>
     {!video.is_published && <p className="mb-4 text-amber-200">非公開動画の管理者プレビュー</p>}
     {video.is_sample && <p className="mb-4 text-amber-200">サンプル教材：操作体験用のデモ映像です。正式な講義ではありません。</p>}
@@ -37,6 +40,15 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
     {video.is_published && <CompleteLessonButton key={`${user.id}:${id}`} id={id} completed={!!completion} />}
     {Array.isArray(questions) && <VideoQuiz key={`${user.id}:${id}`} id={id} questions={questions as QuizQuestion[]} />}
     {quizError && quizError.code !== "PGRST202" && <p role="alert" className="mb-4 text-red-200">理解度テストを取得できませんでした。再読み込みしてください。</p>}
+    <section className="mb-8" aria-label="受験履歴">
+      <h2 className="text-xl font-semibold">過去の受験履歴（最新20件）</h2>
+      {historyError ? <p role="alert">履歴を取得できませんでした。ページを再読み込みしてください。</p> :
+        <ul>{history?.map(attempt => <li key={attempt.id}>
+          {new Date(attempt.taken_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}：
+          {attempt.question_count}問中{attempt.correct_count}問正解（{attempt.percentage}%）
+        </li>)}</ul>}
+      {!historyError && !history?.length && <p>受験履歴はまだありません。</p>}
+    </section>
     <Link href="/videos" className="button-secondary">動画一覧へ戻る</Link>
   </LmsShell>;
 }
