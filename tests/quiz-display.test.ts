@@ -35,6 +35,14 @@ beforeEach(() => {
   mocks.signed.mockResolvedValue({ data: { signedUrl: "https://example.test/video" }, error: null });
 });
 describe("quiz display alongside persistent history", () => {
+  it("uses distinct sibling keys for completion and quiz", async () => {
+    const page = await VideoPage({ params: Promise.resolve({ id }) });
+    const children = page.props.children as React.ReactNode[];
+    const keys = children.filter(React.isValidElement).map(child => child.key).filter(key => key !== null);
+    expect(keys).toContain(`completion:00000000-0000-4000-8000-000000000001:${id}`);
+    expect(keys).toContain(`quiz:00000000-0000-4000-8000-000000000001:${id}`);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
   it("renders three answerable questions, playback and history on fresh page loads", async () => {
     for (let n=0;n<2;n++) {
       const markup=await html();

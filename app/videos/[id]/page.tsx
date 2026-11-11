@@ -45,8 +45,8 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
     </div> : signingError || !data ? <p role="alert" className="rounded-xl border border-red-400/30 p-5 text-red-200">再生URLを取得できませんでした。時間をおいて再読み込みしてください。</p> : <VideoPlayer src={data.signedUrl} id={id} />}
     {video.storage_path && <p className="mt-3 text-sm text-slate-400">再生が途切れた場合は再生URLを自動更新します。改善しない場合は「再生を再試行」を押してください。</p>}
     <p className="my-8 whitespace-pre-wrap break-words leading-8 text-slate-300">{video.description || "説明はありません。"}</p>
-    {video.is_published && <CompleteLessonButton key={`${user.id}:${id}`} id={id} completed={!!completion} />}
-    {Array.isArray(questions) && questions.length > 0 && <VideoQuiz key={`${user.id}:${id}`} id={id} questions={questions as QuizQuestion[]} />}
+    {video.is_published && <CompleteLessonButton key={`completion:${user.id}:${id}`} id={id} completed={!!completion} />}
+    {Array.isArray(questions) && questions.length > 0 && <VideoQuiz key={`quiz:${user.id}:${id}`} id={id} questions={questions as QuizQuestion[]} />}
     {quizError && <p role="alert" className="mb-4 text-red-200">
       {quizError.code === "PGRST202"
         ? "理解度テストを取得できません。接続先のクイズ機能が未適用、またはAPIに反映されていない可能性があります。"
