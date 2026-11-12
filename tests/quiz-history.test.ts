@@ -120,3 +120,39 @@ describe("persistent quiz attempts", () => {
    });
  });
 });
+
+describe("final QA database boundaries", () => {
+ it("stores 33 percent and does not store incomplete or invalid submissions", async () => {
+   await withDatabaseRole(learner,"authenticated",async()=>{
+     expect((await submit([1,0,1],key(200))).rows[0].result).toMatchObject({correct_count:1,percentage:33});
+     const before=(await db.query("select count(*) n from public.video_quiz_attempts")).rows;
+     for (const answers of [[],[1,2],[-1,2,0],[3,2,0]]) {
+       await expect(submit(answers,key(201))).rejects.toMatchObject({code:"22023"});
+     }
+     expect((await submit([1,2,0],key(202),"10000000-0000-4000-8000-999999999999")).rows[0].result).toBeNull();
+     await expect(submit([1,2,0],key(203),"invalid-uuid")).rejects.toMatchObject({code:"22P02"});
+     expect((await db.query("select count(*) n from public.video_quiz_attempts")).rows).toEqual(before);
+   });
+ });
+ it("denies anonymous history SELECT and guessing another user's submission key", async()=>{
+   await withDatabaseRole("","anon",async()=>{
+     await expect(db.query("select * from public.video_quiz_attempts")).rejects.toMatchObject({code:"42501"});
+   });
+   await withDatabaseRole(admin,"authenticated",async()=>{
+     expect((await db.query("select * from public.video_quiz_attempts where submission_id=$1",[key(200)])).rows).toHaveLength(0);
+     const own=await submit([1,2,0],key(200));
+     expect(own.rows[0].result).toMatchObject({correct_count:3});
+   });
+ });
+ it("keeps per-video history separate after both videos have attempts", async()=>{
+   await db.query("insert into public.video_entitlements(video_id,user_id) values ($1,$2)",[paid,learner]);
+   await db.query("insert into private.video_quizzes(video_id,questions) select $1,questions from private.video_quizzes where video_id=$2",[paid,free]);
+   await withDatabaseRole(learner,"authenticated",async()=>{
+     await submit([0,0,1],key(210),paid);
+     const ownFree=await db.query<{video_id:string}>("select video_id from public.video_quiz_attempts where user_id=$1 and video_id=$2 order by taken_at desc limit 20",[learner,free]);
+     expect(ownFree.rows.length).toBeGreaterThan(0);
+     expect(ownFree.rows.every(row=>row.video_id===free)).toBe(true);
+     expect((await db.query("select * from public.video_quiz_attempts where video_id=$1",[paid])).rows).toHaveLength(1);
+   });
+ });
+});

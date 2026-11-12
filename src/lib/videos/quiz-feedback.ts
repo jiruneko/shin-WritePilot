@@ -7,7 +7,10 @@ const catalog = [
 export type QuestionFeedback = { correct: boolean; category?: string; answer?: string; explanation?: string };
 export type CategoryAnalysis = { category: string; total: number; correct: number; percentage: number; provisional: boolean; weak: boolean };
 export function questionFeedback(questions: unknown, answers: unknown, correct: unknown): QuestionFeedback[] {
-  if (!Array.isArray(questions) || !Array.isArray(answers) || !Array.isArray(correct)) return [];
+  if (!Array.isArray(questions) || !Array.isArray(answers) || !Array.isArray(correct)
+    || questions.length !== answers.length || questions.length !== correct.length
+    || !answers.every(answer => Number.isInteger(answer) && answer >= 0)
+    || !correct.every(value => typeof value === "boolean")) return [];
   return questions.flatMap((question, index) => {
     if (typeof correct[index] !== "boolean" || !Number.isInteger(answers[index])) return [];
     const entry = catalog.find(item => question?.prompt === item.prompt && JSON.stringify(question?.options) === JSON.stringify(item.options));
