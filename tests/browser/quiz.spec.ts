@@ -37,7 +37,7 @@ async function open(page: Page) {
 async function answer(page: Page, answers: number[]) {
   for (let n = 0; n < answers.length; n++) await page.locator(`input[name="question-${n}"][value="${answers[n]}"]`).check();
 }
-for (const [answers, score, percentage] of [[[1,2,0],3,100],[[1,0,0],2,67],[[0,0,1],0,0]] as const) {
+for (const [answers, score, percentage] of [[[1,0,1],1,33],[[1,2,0],3,100],[[1,0,0],2,67],[[0,0,1],0,0]] as const) {
   test(`answers ${answers} show score ${score} and save success`, async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
