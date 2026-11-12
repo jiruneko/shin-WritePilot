@@ -206,7 +206,7 @@ describe("learning progress actions and reads", () => {
 describe("quiz submission", () => {
   it("attaches feedback only after a successful authenticated saved submission", async () => {
     const questions = [{prompt:"文字を入力するとき、入力装置として使うものはどれですか？", options:["ディスプレイ","スピーカー","キーボード"]}];
-    mocks.rpc.mockResolvedValue({data:{questions,answers:[0,0,0],correct:[false,true,true],correct_count:2,percentage:67},error:null});
+    mocks.rpc.mockResolvedValue({data:{questions:[...questions,...questions,...questions],answers:[0,0,0],correct:[false,false,false],correct_count:0,percentage:0},error:null});
     const result = await submitVideoQuiz(id,[0,0,0],id);
     expect(result.feedback?.[0]).toMatchObject({correct:false,answer:"キーボード",category:"入力装置"});
     expect(mocks.getUser).toHaveBeenCalled();
