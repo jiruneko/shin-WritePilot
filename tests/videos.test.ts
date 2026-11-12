@@ -204,6 +204,14 @@ describe("learning progress actions and reads", () => {
 });
 
 describe("quiz submission", () => {
+  it("attaches feedback only after a successful authenticated saved submission", async () => {
+    const questions = [{prompt:"文字を入力するとき、入力装置として使うものはどれですか？", options:["ディスプレイ","スピーカー","キーボード"]}];
+    mocks.rpc.mockResolvedValue({data:{questions,answers:[0,0,0],correct:[false,true,true],correct_count:2,percentage:67},error:null});
+    const result = await submitVideoQuiz(id,[0,0,0],id);
+    expect(result.feedback?.[0]).toMatchObject({correct:false,answer:"キーボード",category:"入力装置"});
+    expect(mocks.getUser).toHaveBeenCalled();
+  });
+
   it("reports missing history migration without pretending the answer was saved", async () => {
     mocks.rpc.mockResolvedValue({ data: null, error: { code: "PGRST202" } });
     const result = await submitVideoQuiz(id, [1,2,0], id);
@@ -224,7 +232,7 @@ describe("quiz submission", () => {
     [[false, false, false], 0],
   ])("returns %j with score %s", async (correct, score) => {
     mocks.rpc.mockResolvedValue({ data: { correct, correct_count: score, percentage: Math.round(score / 3 * 100) }, error: null });
-    expect(await submitVideoQuiz(id, [1, 2, 0], id)).toEqual({ correct, score, percentage: Math.round(score / 3 * 100), saved: true });
+    expect(await submitVideoQuiz(id, [1, 2, 0], id)).toEqual({ feedback: [], correct, score, percentage: Math.round(score / 3 * 100), saved: true });
     expect(mocks.rpc).toHaveBeenCalledWith("submit_video_quiz", { lesson_id: id, answers: [1, 2, 0], request_id: id });
   });
 

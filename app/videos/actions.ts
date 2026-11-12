@@ -1,4 +1,5 @@
 "use server";
+import { questionFeedback } from "@/src/lib/videos/quiz-feedback";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/src/lib/supabase/server";
 import { UUID, VIDEO_BUCKET } from "@/src/lib/videos/validation";
@@ -81,7 +82,7 @@ export async function submitVideoQuiz(id: string, answers: number[], submissionI
     }
 
     revalidatePath(`/videos/${id}`);
-    return { correct: data.correct as boolean[], score: data.correct_count as number, percentage: data.percentage as number, saved: true };
+    return { feedback: questionFeedback(data.questions, data.answers, data.correct), correct: data.correct as boolean[], score: data.correct_count as number, percentage: data.percentage as number, saved: true };
   } catch {
     return { error: "通信に失敗しました。再試行してください。" };
   }

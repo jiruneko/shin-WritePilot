@@ -52,7 +52,12 @@ export function VideoQuiz({ id, questions }: { id: string; questions: QuizQuesti
       <p>正答率：{result.percentage}% ／ 学習履歴を保存しました。</p>
       <button type="button" className="button-secondary mt-3" onClick={() => { submission.current = null; setResult(undefined); }}>もう一度受験する</button>
       <ol className="mt-2 list-inside list-decimal">
-        {result.correct.map((correct, index) => <li key={index}>{correct ? "正解" : "不正解"}</li>)}
+        {result.correct.map((correct, index) => <li key={index}>{correct ? "正解" : "不正解"}
+          {result.feedback?.[index]?.category && <span>（{result.feedback[index].category}）</span>}
+          {!correct && <p>正解：{result.feedback?.[index]?.answer ?? "正解データは未設定です。"}</p>}
+          {correct ? <details><summary>解説を見る</summary><p>{result.feedback?.[index]?.explanation ?? "解説は準備中です。"}</p></details>
+            : <p>{result.feedback?.[index]?.explanation ?? "解説は準備中です。"}</p>}
+        </li>)}
       </ol>
     </div>}
   </section>;
