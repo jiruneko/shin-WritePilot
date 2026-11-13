@@ -53,7 +53,11 @@ for (const [answers, score, percentage] of [[[1,0,1],1,33],[[1,2,0],3,100],[[1,0
     await expect(page.getByRole("status")).toContainText("学習履歴を保存しました");
     await expect(page.getByRole("button", { name: "保存済み", exact: true })).toBeDisabled();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await expect(page.getByText("コンピュータの基礎", {exact:false})).toHaveCount(3);
+    await expect(page.getByText("コンピュータの基礎", {exact:false})).toHaveCount(score < 3 ? 4 : 3);
+    const review = page.getByRole("region", { name: "おすすめの復習" });
+    await expect(review).toBeVisible();
+    await expect(review).toContainText(score === 3 ? "次の学習" : score === 0 ? "基礎から" : "優先して復習");
+    await expect(review.getByRole("link", { name: score === 3 ? "次の教材を探す" : "この動画を見直す" })).toHaveAttribute("href", score === 3 ? "/videos" : "#lesson-video");
     if (score < 3) await expect(page.getByText("正解：", {exact:false}).first()).toBeVisible();
     if (score > 0) {
       await page.getByText("解説を見る", {exact:true}).first().click();

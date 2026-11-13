@@ -1,3 +1,5 @@
+import { QuizReview } from "@/app/components/quiz-review";
+import { questionFeedback } from "@/src/lib/videos/quiz-feedback";
 import { analyzeWeakness } from "@/src/lib/videos/quiz-feedback";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -41,10 +43,12 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
   return <LmsShell title={video.title} admin={profile.role === "ADMIN"}>
     {!video.is_published && <p className="mb-4 text-amber-200">非公開動画の管理者プレビュー</p>}
     {video.is_sample && <p className="mb-4 text-amber-200">サンプル教材：操作体験用のデモ映像です。正式な講義ではありません。</p>}
+    <div id="lesson-video" className="scroll-mt-4">
     {video.youtube_id && /^[A-Za-z0-9_-]{11}$/.test(video.youtube_id) ? <div>
       <iframe className="aspect-video w-full rounded-2xl border-0" src={`https://www.youtube-nocookie.com/embed/${video.youtube_id}`} title={`${video.title}のサンプル動画`} allow="encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />
       <p className="mt-3 text-sm text-slate-400">再生できない場合は <a className="underline" href={`https://www.youtube.com/watch?v=${video.youtube_id}`} target="_blank" rel="noopener noreferrer">YouTubeで開く</a>。外部サービスの提供状況により視聴できない場合があります。</p>
     </div> : signingError || !data ? <p role="alert" className="rounded-xl border border-red-400/30 p-5 text-red-200">再生URLを取得できませんでした。時間をおいて再読み込みしてください。</p> : <VideoPlayer src={data.signedUrl} id={id} />}
+    </div>
     {video.storage_path && <p className="mt-3 text-sm text-slate-400">再生が途切れた場合は再生URLを自動更新します。改善しない場合は「再生を再試行」を押してください。</p>}
     <p className="my-8 whitespace-pre-wrap break-words leading-8 text-slate-300">{video.description || "説明はありません。"}</p>
     {video.is_published && <CompleteLessonButton key={`completion:${user.id}:${id}`} id={id} completed={!!completion} />}
@@ -75,6 +79,17 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
         <ul>{history?.map(attempt => <li key={attempt.id}>
           {new Date(attempt.taken_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}：
           {attempt.question_count}問中{attempt.correct_count}問正解（{attempt.percentage}%）
+          <details className="my-3 rounded-xl border border-slate-700 p-3">
+            <summary className="cursor-pointer">この受験の復習と解説を見る</summary>
+            <QuizReview feedback={questionFeedback(attempt.questions, attempt.answers, attempt.correct)} />
+            <ol className="list-inside list-decimal space-y-2">
+              {questionFeedback(attempt.questions, attempt.answers, attempt.correct).map((item, index) => <li key={index}>
+                問題{index + 1}：{item.correct ? "正解" : "確認してみましょう"}
+                {!item.correct && <p>正解：{item.answer ?? "正解データは未設定です。"}</p>}
+                <p>{item.explanation ?? "解説は準備中です。"}</p>
+              </li>)}
+            </ol>
+          </details>
         </li>)}</ul>}
       {!historyError && !history?.length && <p>受験履歴はまだありません。</p>}
     </section>

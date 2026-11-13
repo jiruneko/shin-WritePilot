@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition, type FormEvent } from "react";
+import { QuizReview } from "./quiz-review";
 import { submitVideoQuiz } from "@/app/videos/actions";
 
 export type QuizQuestion = { prompt: string; options: string[] };
@@ -51,6 +52,7 @@ export function VideoQuiz({ id, questions }: { id: string; questions: QuizQuesti
       <p className="font-semibold">{questions.length}問中{result.score}問正解</p>
       <p>正答率：{result.percentage}% ／ 学習履歴を保存しました。</p>
       <button type="button" className="button-secondary mt-3" onClick={() => { submission.current = null; setResult(undefined); }}>もう一度受験する</button>
+      <QuizReview feedback={result.feedback ?? []} />
       <ol className="mt-2 list-inside list-decimal">
         {result.correct.map((correct, index) => <li key={index}>{correct ? "正解" : "不正解"}
           {result.feedback?.[index]?.category && <span>（{result.feedback[index].category}）</span>}
