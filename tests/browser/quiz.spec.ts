@@ -5,15 +5,23 @@ import path from "node:path";
 let javascript: string;
 let css: string;
 test.beforeAll(async () => {
-  // Bundle the real UI; replace only the server-action boundary. SQL/RLS and
+  // Bundle the real UI; replace framework navigation and the server-action boundary. SQL/RLS and
   // authenticated actions are separately tested in Vitest, not simulated here.
   const result = await build({
     configFile: false, logLevel: "silent",
     define: { "process.env.NODE_ENV": JSON.stringify("production") },
     plugins: [{
       name: "quiz-action-fixture", enforce: "pre",
-      resolveId(id) { if (id === "@/app/videos/actions") return "\0quiz-action"; },
+      resolveId(id) {
+        if (id === "@/app/videos/actions") return "\0quiz-action";
+        if (id === "next/link") return "\0quiz-link";
+      },
       load(id) {
+        // This isolated Vite page has no Next router/runtime. Keep link markup
+        // and destinations testable without bundling Next's process.env reads.
+        if (id === "\0quiz-link") return `import { createElement } from 'react';
+          export default function Link(props) { return createElement('a', props); }`;
+
         if (id === "\0quiz-action") return `export async function submitVideoQuiz(id, answers, submissionId) {
           const response = await fetch('/__quiz_submit', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,answers,submissionId})});
           return response.json();
@@ -30,7 +38,10 @@ async function open(page: Page) {
   await page.route("**/__quiz_harness", route => route.fulfill({ contentType: "text/html", body: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div></body></html>` }));
   await page.goto("/__quiz_harness");
   await page.addStyleTag({ content: css });
+  const startupErrors: string[] = [];
+  page.on("pageerror", error => startupErrors.push(error.message));
   await page.addScriptTag({ content: javascript });
+  await expect.poll(() => startupErrors, { message: "Quiz harness must start without JavaScript errors" }).toEqual([]);
   await expect(page.locator("fieldset")).toHaveCount(3);
   await expect(page.getByRole("radio")).toHaveCount(9);
 }
