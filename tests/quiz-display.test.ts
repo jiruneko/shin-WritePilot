@@ -27,14 +27,14 @@ function fixture(historyError = false, reject = false) {
     : table === "video_completions" ? query(null)
     : query(historyError ? null : [{ id: "attempt", correct_count: 2, question_count: 3, percentage: 67, taken_at: "2026-11-11T00:00:00Z" }], historyError ? { code: "PGRST205" } : null, reject));
 }
-async function html() { return renderToStaticMarkup(await VideoPage({ params: Promise.resolve({ id }) })); }
+async function html(videoId = id) { return renderToStaticMarkup(await VideoPage({ params: Promise.resolve({ id: videoId }) })); }
 beforeEach(() => {
   vi.stubGlobal("React", React);
   vi.clearAllMocks(); fixture();
   mocks.rpc.mockResolvedValue({ data: questions, error: null });
   mocks.signed.mockResolvedValue({ data: { signedUrl: "https://example.test/video" }, error: null });
 });
-describe("quiz display alongside persistent history", () => {
+describe("quiz-only display", () => {
   it("uses distinct sibling keys for completion and quiz", async () => {
     const page = await VideoPage({ params: Promise.resolve({ id }) });
     const children = page.props.children as React.ReactNode[];
@@ -43,12 +43,12 @@ describe("quiz display alongside persistent history", () => {
     expect(keys).toContain(`quiz:00000000-0000-4000-8000-000000000001:${id}`);
     expect(new Set(keys).size).toBe(keys.length);
   });
-  it("renders three answerable questions, playback and history on fresh page loads", async () => {
+  it("renders three answerable questions, playback on fresh page loads", async () => {
     for (let n=0;n<2;n++) {
       const markup=await html();
       expect(markup.match(/<fieldset/g)).toHaveLength(3);
       expect(markup.match(/type="radio"/g)).toHaveLength(9);
-      expect(markup).toContain("回答を提出する"); expect(markup).toContain("67%"); expect(markup).toContain("<video");
+      expect(markup).toContain("回答を提出する"); expect(markup).not.toContain("受験履歴"); expect(markup).toContain("<video");
     }
     expect(mocks.rpc).toHaveBeenCalledWith("video_quiz", { lesson_id: id });
   });
@@ -58,17 +58,14 @@ describe("quiz display alongside persistent history", () => {
     expect(markup).toContain("再生URLを取得できません");
     expect(markup.match(/<fieldset/g)).toHaveLength(3);
   });
-  it.each([false,true])("keeps quiz visible when history fails (throws=%s)", async reject => {
-    fixture(true,reject);
-    const markup=await html();
-    expect(markup).toContain(reject ? "履歴を取得できません" : "履歴保存機能のDB準備が完了していません"); expect(markup.match(/<fieldset/g)).toHaveLength(3);
+  it("keeps playback available on other videos without querying the quiz", async () => {
+    const markup = await html("10000000-0000-4000-8000-000000000001");
+    expect(markup).toContain("<video");
+    expect(markup).not.toContain("理解度テスト");
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
   it("shows a missing RPC error instead of silently hiding the quiz", async () => {
     mocks.rpc.mockResolvedValue({ data: null, error: { code: "PGRST202" } });
     expect(await html()).toContain("接続先のクイズ機能が未適用");
-  });
-  it("shows a diagnostic when the RPC returns no accessible quiz", async () => {
-    mocks.rpc.mockResolvedValue({ data: null, error: null });
-    expect(await html()).toContain("テスト未登録、または受験権限がない");
   });
 });

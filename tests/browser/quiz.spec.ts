@@ -14,8 +14,8 @@ test.beforeAll(async () => {
       name: "quiz-action-fixture", enforce: "pre",
       resolveId(id) { if (id === "@/app/videos/actions") return "\0quiz-action"; },
       load(id) {
-        if (id === "\0quiz-action") return `export async function submitVideoQuiz(id, answers, submissionId) {
-          const response = await fetch('/__quiz_submit', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,answers,submissionId})});
+        if (id === "\0quiz-action") return `export async function submitVideoQuiz(id, answers) {
+          const response = await fetch('/__quiz_submit', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,answers})});
           return response.json();
         }`;
       },
@@ -38,62 +38,22 @@ async function answer(page: Page, answers: number[]) {
   for (let n = 0; n < answers.length; n++) await page.locator(`input[name="question-${n}"][value="${answers[n]}"]`).check();
 }
 for (const [answers, score, percentage] of [[[1,0,1],1,33],[[1,2,0],3,100],[[1,0,0],2,67],[[0,0,1],0,0]] as const) {
-  test(`answers ${answers} show score ${score} and save success`, async ({ page }) => {
+  test(`answers ${answers} show score ${score} and percentage`, async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
     await page.route("**/__quiz_submit", async route => {
       expect(route.request().postDataJSON().answers).toEqual(answers);
-      await route.fulfill({ json: { correct: answers.map((value,index) => value === [1,2,0][index]), score, percentage, saved: true, feedback: answers.map((value,index) => ({correct:value === [1,2,0][index],answer:["入力→処理→出力","キーボード","プリンター"][index], explanation:"入力と出力の役割を確認しましょう。",category:"コンピュータの基礎"})) } });
+      await route.fulfill({ json: { correct: answers.map((value, index) => value === [1, 2, 0][index]), score } });
     });
     await open(page); await answer(page, [...answers]);
     await page.getByRole("button", { name: "回答を提出する", exact: true }).click();
     await expect(page.getByRole("status")).toContainText(`3問中${score}問正解`);
     await expect(page.getByRole("status")).toContainText(`正答率：${percentage}%`);
-    await expect(page.getByRole("status")).toContainText("学習履歴を保存しました");
-    await expect(page.getByRole("button", { name: "保存済み", exact: true })).toBeDisabled();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await expect(page.getByText("コンピュータの基礎", {exact:false})).toHaveCount(3);
-    if (score < 3) await expect(page.getByText("正解：", {exact:false}).first()).toBeVisible();
-    if (score > 0) {
-      await page.getByText("解説を見る", {exact:true}).first().click();
-      await expect(page.getByText("入力と出力の役割を確認しましょう。", {exact:true}).first()).toBeVisible();
-    }
     expect(errors).toEqual([]);
   });
 }
-test("failed save retries the same key; new attempt gets a fresh key", async ({ page }) => {
-  const submissions: { answers: number[]; submissionId: string }[] = [];
-  await page.route("**/__quiz_submit", async route => {
-    submissions.push(route.request().postDataJSON());
-    await route.fulfill({ json: submissions.length === 1 ? { error: "保存に失敗しました。再試行してください。" } : { correct: [true,true,true], score: 3, percentage: 100, saved: true } });
-  });
-  await open(page); await answer(page, [1,2,0]);
-  await page.getByRole("button", { name: "回答を提出する", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("保存に失敗");
-  await expect(page.getByRole("radio").last()).toBeEnabled();
-  await page.getByRole("button", { name: "同じ回答で再試行する", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("保存しました");
-  expect(submissions[0]).toEqual(submissions[1]);
-  await page.getByRole("button", { name: "もう一度受験する", exact: true }).click();
-  await page.getByRole("button", { name: "回答を提出する", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("保存しました");
-  expect(submissions).toHaveLength(3);
-  expect(submissions[2].submissionId).not.toBe(submissions[1].submissionId);
-});
-test("rapid submissions send only one request", async ({ page }) => {
-  let calls = 0;
-  await page.route("**/__quiz_submit", async route => {
-    calls++;
-    await new Promise(resolve => setTimeout(resolve, 100));
-    await route.fulfill({ json: { correct: [true,true,true], score: 3, percentage: 100, saved: true } });
-  });
-  await open(page); await answer(page, [1,2,0]);
-  await page.locator("form").evaluate(form => { (form as HTMLFormElement).requestSubmit(); (form as HTMLFormElement).requestSubmit(); });
-  await expect(page.getByRole("status")).toContainText("保存しました");
-  expect(calls).toBe(1);
-});
-
 test("unanswered form does not submit or reveal feedback", async ({page}) => {
   let calls=0;
   await page.route("**/__quiz_submit", route => {calls++; return route.fulfill({json:{}});});

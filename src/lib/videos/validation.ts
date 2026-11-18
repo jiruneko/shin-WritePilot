@@ -1,3 +1,4 @@
+export const LAUNCH_QUIZ_VIDEO_ID = "52fb387f-e7b5-4b74-9b7e-264cd644d86d";
 export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 export const VIDEO_BUCKET = "videos";
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
