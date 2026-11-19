@@ -3,6 +3,9 @@ const catalog = [
   { prompt: "コンピュータが情報を処理する基本的な流れはどれですか？", options: ["出力 → 処理 → 入力", "入力 → 処理 → 出力", "処理 → 出力 → 入力"], answer: 1, category: "情報処理の流れ", explanation: "コンピュータは、入力された情報を処理して、その結果を出力します。文字を入力し、計算や編集を行い、画面に表示する流れを思い浮かべましょう。" },
   { prompt: "文字を入力するとき、入力装置として使うものはどれですか？", options: ["ディスプレイ", "スピーカー", "キーボード"], answer: 2, category: "入力装置", explanation: "キーボードは文字や命令をコンピュータに伝える入力装置です。ディスプレイとスピーカーは、処理結果を人に伝える出力装置です。" },
   { prompt: "コンピュータが処理した結果を紙に出す装置はどれですか？", options: ["プリンター", "マウス", "マイク"], answer: 0, category: "出力装置", explanation: "プリンターは処理結果を紙に印刷する出力装置です。マウスやマイクは、操作や音声を取り込む入力装置です。" },
+  { prompt: "電腦處理資訊的基本流程是什麼？", options: ["輸出 → 處理 → 輸入", "輸入 → 處理 → 輸出", "處理 → 輸出 → 輸入"], answer: 1, category: "資訊處理流程", explanation: "電腦先接收輸入的資料，再進行處理，最後將結果輸出。" },
+  { prompt: "要在電腦上輸入文字，應該使用哪一種裝置？", options: ["螢幕", "喇叭", "鍵盤"], answer: 2, category: "輸入裝置", explanation: "鍵盤是輸入裝置。螢幕和喇叭則是輸出裝置。" },
+  { prompt: "哪一種裝置能把電腦處理的結果印在紙上？", options: ["印表機", "滑鼠", "麥克風"], answer: 0, category: "輸出裝置", explanation: "印表機是輸出裝置，可以把電腦處理的結果印在紙上。" },
 ];
 export type QuestionFeedback = { correct: boolean; category?: string; answer?: string; explanation?: string };
 export type CategoryAnalysis = { category: string; total: number; correct: number; percentage: number; provisional: boolean; weak: boolean };
