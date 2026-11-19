@@ -1,4 +1,5 @@
 import React from "react";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), from: vi.fn(), signed: vi.fn() }));
@@ -71,4 +72,21 @@ describe("quiz display alongside persistent history", () => {
     mocks.rpc.mockResolvedValue({ data: null, error: null });
     expect(await html()).toContain("テスト未登録、または受験権限がない");
   });
+});
+
+it("restores per-attempt recommendations on reload and scopes history to the current user/video", async () => {
+  const sql = readFileSync("supabase/migrations/202611100001_video_comprehension_quiz.sql", "utf8");
+  const snapshot = JSON.parse(sql.split("select id, '")[1].split("'::jsonb")[0]);
+  const historyQuery = query([{id:"old",taken_at:"2026-11-11T00:00:00Z",questions:snapshot,answers:[1,0,0],correct:[true,false,true],question_count:3,correct_count:2,percentage:67}]);
+  const previous = mocks.from.getMockImplementation()!;
+  mocks.from.mockImplementation(table => table === "video_quiz_attempts" ? historyQuery : previous(table));
+  for (let n=0;n<2;n++) {
+    const markup = await html();
+    expect(markup).toContain("おすすめの復習");
+    expect(markup).toContain("入力装置");
+    expect(markup).toContain("この動画を見直す");
+    expect(markup).toContain("キーボード");
+  }
+  expect(historyQuery.eq).toHaveBeenCalledWith("user_id", "00000000-0000-4000-8000-000000000001");
+  expect(historyQuery.eq).toHaveBeenCalledWith("video_id", id);
 });
