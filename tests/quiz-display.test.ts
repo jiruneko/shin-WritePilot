@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), from: vi.fn(), signed: vi.fn() }));
-vi.mock("@/src/lib/auth/profile", () => ({ requireProfile: async () => ({
+vi.mock("@/src/lib/auth/user", () => ({ isAuthConfigured: () => true }));
+vi.mock("@/src/lib/auth/profile", () => ({ optionalProfile: async () => ({
   user: { id: "00000000-0000-4000-8000-000000000001" }, profile: { role: "USER" },
   supabase: { rpc: mocks.rpc, from: mocks.from, storage: { from: () => ({ createSignedUrl: mocks.signed }) } },
 }) }));
@@ -39,7 +40,9 @@ describe("quiz display alongside persistent history", () => {
   it("uses distinct sibling keys for completion and quiz", async () => {
     const page = await VideoPage({ params: Promise.resolve({ id }) });
     const children = page.props.children as React.ReactNode[];
-    const keys = children.filter(React.isValidElement).map(child => child.key).filter(key => key !== null);
+    const controls = children.find(child => React.isValidElement<React.PropsWithChildren>(child) && child.type === React.Fragment);
+    const keys = React.isValidElement<React.PropsWithChildren>(controls) && Array.isArray(controls.props.children)
+      ? controls.props.children.filter(React.isValidElement).map(child => child.key).filter(key => key !== null) : [];
     expect(keys).toContain(`completion:00000000-0000-4000-8000-000000000001:${id}`);
     expect(keys).toContain(`quiz:00000000-0000-4000-8000-000000000001:${id}`);
     expect(new Set(keys).size).toBe(keys.length);

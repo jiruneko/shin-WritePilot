@@ -8,8 +8,9 @@ export async function renewPlayback(id: string): Promise<{ url?: string; error?:
     if (!UUID.test(id)) return { error: "動画が見つかりません。" };
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) return { error: "もう一度ログインしてください。" };
-    const { data: video, error } = await supabase.from("videos").select("storage_path").eq("id", id).eq("is_deleting", false).maybeSingle();
+    const videoQuery = supabase.from("videos").select("storage_path").eq("id", id).eq("is_deleting", false);
+    if (authError || !user) videoQuery.match({ access_level: "FREE", is_published: true });
+    const { data: video, error } = await videoQuery.maybeSingle();
     if (error || !video?.storage_path) return { error: "動画が存在しないか、公開が終了しています。" };
     const { data, error: signingError } = await supabase.storage.from(VIDEO_BUCKET).createSignedUrl(video.storage_path, 300);
     if (signingError || !data) return { error: "再生URLを取得できませんでした。" };
