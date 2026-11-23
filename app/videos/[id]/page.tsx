@@ -1,12 +1,14 @@
 import { QuizReview } from "@/app/components/quiz-review";
 import { questionFeedback } from "@/src/lib/videos/quiz-feedback";
 import { analyzeWeakness } from "@/src/lib/videos/quiz-feedback";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { requireProfile } from "@/src/lib/auth/profile";
+import { isAuthConfigured } from "@/src/lib/auth/user";
+import { optionalProfile } from "@/src/lib/auth/profile";
 import { LmsShell } from "@/app/components/lms-shell";
 import { VideoPlayer } from "@/app/components/video-player";
-import { VIDEO_BUCKET, UUID } from "@/src/lib/videos/validation";
+import { signVideoPlayback } from "@/src/lib/supabase/video-storage";
+import { UUID } from "@/src/lib/videos/validation";
 import { CompleteLessonButton } from "@/app/components/complete-lesson-button";
 import { VideoQuiz, type QuizQuestion } from "@/app/components/video-quiz";
 export const dynamic = "force-dynamic";
@@ -17,27 +19,31 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return id === TAIWAN_LESSON_ID ? { title: "什麼是電腦？｜WritePilot" } : {};
 }
 export default async function VideoPage({ params }: { params: Promise<{ id: string }> }) {
-  const { user, profile, supabase } = await requireProfile();
+  if (!isAuthConfigured()) redirect("/login");
+  const { user, profile, supabase } = await optionalProfile();
   const { id } = await params;
   const taiwan = id === TAIWAN_LESSON_ID;
   const t = (ja: string, zh: string) => taiwan ? zh : ja;
   if (!UUID.test(id)) notFound();
-  const { data: video, error } = await supabase.from("videos").select("*").eq("id", id).eq("is_deleting", false).maybeSingle();
+  const videoQuery = supabase.from("videos").select("*").eq("id", id).eq("is_deleting", false);
+  if (!user) videoQuery.match({ access_level: "FREE", is_published: true });
+  const { data: video, error } = await videoQuery.maybeSingle();
   if (error) throw new Error(t("動画を取得できませんでした。", "無法載入影片。"));
+  if (!video && !user) redirect("/login");
   if (!video) notFound();
-  // Session-scoped Storage client + RLS, never a service-role playback client.
+  // The session-scoped lookup above authorizes the object before server signing.
   const { data, error: signingError } = video.storage_path
-    ? await supabase.storage.from(VIDEO_BUCKET).createSignedUrl(video.storage_path, 300)
+    ? await signVideoPlayback(video.storage_path)
     : { data: null, error: null };
-  const { data: completion, error: completionError } = await supabase.from("video_completions")
-    .select("video_id").eq("user_id", user.id).eq("video_id", id).maybeSingle();
+  const { data: completion, error: completionError } = user ? await supabase.from("video_completions")
+    .select("video_id").eq("user_id", user.id).eq("video_id", id).maybeSingle() : { data: null, error: null };
   if (completionError) throw new Error(t("学習完了の状態を取得できませんでした。再読み込みしてください。", "無法取得學習進度，請重新整理頁面。"));
   // Quiz access is decided by its authenticated RPC, independently of Storage signing.
-  const { data: questions, error: quizError } = video.is_published
+  const { data: questions, error: quizError } = user && video.is_published
     ? await supabase.rpc("video_quiz", { lesson_id: id })
     : { data: null, error: null };
   // A history outage must not prevent the existing quiz from rendering.
-  const historyResult = await (async () => {
+  const historyResult = user ? await (async () => {
     try {
       return await supabase.from("video_quiz_attempts")
         .select("id,correct_count,question_count,percentage,taken_at,questions,answers,correct").eq("user_id", user.id).eq("video_id", id)
@@ -45,10 +51,10 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
     } catch {
       return { data: null, error: { code: "FETCH_ERROR", message: "history unavailable" } };
     }
-  })();
+  })() : { data: null, error: null };
   const { data: history, error: historyError } = historyResult;
   const analysis = analyzeWeakness(history ?? []);
-  return <LmsShell taiwan={taiwan} title={video.title} admin={profile.role === "ADMIN"}>
+  return <LmsShell taiwan={taiwan} title={video.title} admin={profile?.role === "ADMIN"} guest={!user}>
     {!video.is_published && <p className="mb-4 text-amber-200">{t("非公開動画の管理者プレビュー", "未公開影片的管理員預覽")}</p>}
     {video.is_sample && <p className="mb-4 text-amber-200">{t("サンプル教材：操作体験用のデモ映像です。正式な講義ではありません。", "示範教材：此影片供操作體驗使用。")}</p>}
     <div id="lesson-video" className="scroll-mt-4">
@@ -59,6 +65,8 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
     </div>
     {video.storage_path && <p className="mt-3 text-sm text-slate-400">{t("再生が途切れた場合は再生URLを自動更新します。改善しない場合は「再生を再試行」を押してください。", "播放中斷時，系統會自動更新播放連結。若問題持續，請按「重新播放」。")}</p>}
     <p className="my-8 whitespace-pre-wrap break-words leading-8 text-slate-300">{video.description || t("説明はありません。", "目前沒有教材說明。")}</p>
+    {!user && <Link href="/login" className="button-secondary">{t("ログインして学習を記録", "登入以記錄學習")}</Link>}
+    {user && <>
     {video.is_published && <CompleteLessonButton taiwan={taiwan} key={`completion:${user.id}:${id}`} id={id} completed={!!completion} />}
     {Array.isArray(questions) && questions.length > 0 && <VideoQuiz taiwan={taiwan} key={`quiz:${user.id}:${id}`} id={id} questions={questions as QuizQuestion[]} />}
     {quizError && <p role="alert" className="mb-4 text-red-200">
@@ -101,6 +109,7 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
         </li>)}</ul>}
       {!historyError && !history?.length && <p>{t("受験履歴はまだありません。", "目前沒有測驗紀錄。")}</p>}
     </section>
-    <Link href="/videos" className="button-secondary">{t("動画一覧へ戻る", "返回影片列表")}</Link>
+    </>}
+    {user && <Link href="/videos" className="button-secondary">{t("動画一覧へ戻る", "返回影片列表")}</Link>}
   </LmsShell>;
 }

@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/src/lib/supabase/server";
-import { VIDEO_BUCKET, UUID, videoMetadata, validateFile, type VideoResult } from "@/src/lib/videos/validation";
+import { serverVideoStorage } from "@/src/lib/supabase/video-storage";
+import { UUID, videoMetadata, validateFile, type VideoResult } from "@/src/lib/videos/validation";
 
 async function adminContext() {
   const supabase = await createClient();
@@ -77,13 +78,15 @@ export async function deleteVideo(id: string, confirmed: boolean): Promise<Video
   try {
     const { supabase } = await adminContext();
     if (!confirmed || !UUID.test(id)) return { error: "削除の確認が必要です。" };
+    const storage = serverVideoStorage();
+    if (!storage) return failure;
     // Tombstone first; retries continue from the same state. Never republish on failure.
     const { data: video, error } = await supabase.from("videos").update({ is_deleting: true, is_published: false }).eq("id", id).select("storage_path").maybeSingle();
     if (error) return failure;
     if (!video) return { success: true };
     invalidate(id);
     const { error: storageError } = video.storage_path
-      ? await supabase.storage.from(VIDEO_BUCKET).remove([video.storage_path])
+      ? await storage.remove([video.storage_path])
       : { error: null };
     if (storageError) return { error: "動画を非公開にしましたがファイル削除に失敗しました。削除を再試行してください。" };
     const { error: dbError } = await supabase.from("videos").delete().eq("id", id).eq("is_deleting", true);
