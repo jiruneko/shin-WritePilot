@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), from: vi.fn(), signed: vi.fn() }));
+vi.mock("server-only", () => ({}));
+vi.mock("@supabase/supabase-js", () => ({ createClient: () => ({ storage: { from: () => ({ createSignedUrl: mocks.signed }) } }) }));
 vi.mock("@/src/lib/auth/user", () => ({ isAuthConfigured: () => true }));
 vi.mock("@/src/lib/auth/profile", () => ({ optionalProfile: async () => ({
   user: { id: "00000000-0000-4000-8000-000000000001" }, profile: { role: "USER" },
@@ -31,6 +33,8 @@ function fixture(historyError = false, reject = false) {
 }
 async function html() { return renderToStaticMarkup(await VideoPage({ params: Promise.resolve({ id }) })); }
 beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.test");
+  vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-server-key");
   vi.stubGlobal("React", React);
   vi.clearAllMocks(); fixture();
   mocks.rpc.mockResolvedValue({ data: questions, error: null });

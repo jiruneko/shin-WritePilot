@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ getUser: vi.fn(), from: vi.fn(), rpc: vi.fn(), info: vi.fn(), remove: vi.fn(), signed: vi.fn(), revalidate: vi.fn() }));
+vi.mock("server-only", () => ({}));
+vi.mock("@supabase/supabase-js", () => ({ createClient: () => ({ storage: { from: () => ({ createSignedUrl: mocks.signed, remove: mocks.remove }) } }) }));
 vi.mock("@/src/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser }, from: mocks.from, rpc: mocks.rpc, storage: { from: () => ({ info: mocks.info, remove: mocks.remove, createSignedUrl: mocks.signed }) } }) }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } }));
@@ -19,6 +21,8 @@ function query(data: unknown = null, error: unknown = null) {
 }
 function form() { const f = new FormData(); f.set("title", "教材"); f.set("description", "説明"); f.set("is_published", "on"); return f; }
 beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.test");
+  vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-server-key");
   vi.resetAllMocks();
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co"); vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "test-key");
   mocks.getUser.mockResolvedValue({ data: { user: { id: userId } }, error: null });

@@ -2,7 +2,8 @@
 import { questionFeedback } from "@/src/lib/videos/quiz-feedback";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/src/lib/supabase/server";
-import { UUID, VIDEO_BUCKET } from "@/src/lib/videos/validation";
+import { signVideoPlayback } from "@/src/lib/supabase/video-storage";
+import { UUID } from "@/src/lib/videos/validation";
 export async function renewPlayback(id: string): Promise<{ url?: string; error?: string }> {
   try {
     if (!UUID.test(id)) return { error: "動画が見つかりません。" };
@@ -12,7 +13,7 @@ export async function renewPlayback(id: string): Promise<{ url?: string; error?:
     if (authError || !user) videoQuery.match({ access_level: "FREE", is_published: true });
     const { data: video, error } = await videoQuery.maybeSingle();
     if (error || !video?.storage_path) return { error: "動画が存在しないか、公開が終了しています。" };
-    const { data, error: signingError } = await supabase.storage.from(VIDEO_BUCKET).createSignedUrl(video.storage_path, 300);
+    const { data, error: signingError } = await signVideoPlayback(video.storage_path);
     if (signingError || !data) return { error: "再生URLを取得できませんでした。" };
     return { url: data.signedUrl };
   } catch { return { error: "通信に失敗しました。再試行してください。" }; }

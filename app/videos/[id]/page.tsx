@@ -7,7 +7,8 @@ import { isAuthConfigured } from "@/src/lib/auth/user";
 import { optionalProfile } from "@/src/lib/auth/profile";
 import { LmsShell } from "@/app/components/lms-shell";
 import { VideoPlayer } from "@/app/components/video-player";
-import { VIDEO_BUCKET, UUID } from "@/src/lib/videos/validation";
+import { signVideoPlayback } from "@/src/lib/supabase/video-storage";
+import { UUID } from "@/src/lib/videos/validation";
 import { CompleteLessonButton } from "@/app/components/complete-lesson-button";
 import { VideoQuiz, type QuizQuestion } from "@/app/components/video-quiz";
 export const dynamic = "force-dynamic";
@@ -30,9 +31,9 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
   if (error) throw new Error(t("動画を取得できませんでした。", "無法載入影片。"));
   if (!video && !user) redirect("/login");
   if (!video) notFound();
-  // Session-scoped Storage client + RLS, never a service-role playback client.
+  // The session-scoped lookup above authorizes the object before server signing.
   const { data, error: signingError } = video.storage_path
-    ? await supabase.storage.from(VIDEO_BUCKET).createSignedUrl(video.storage_path, 300)
+    ? await signVideoPlayback(video.storage_path)
     : { data: null, error: null };
   const { data: completion, error: completionError } = user ? await supabase.from("video_completions")
     .select("video_id").eq("user_id", user.id).eq("video_id", id).maybeSingle() : { data: null, error: null };
